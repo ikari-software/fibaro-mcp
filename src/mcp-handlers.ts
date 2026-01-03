@@ -97,7 +97,198 @@ export type FibaroClientLike = {
 };
 
 export function getTools(): ListToolsResult {
-    return {
+    const toolset = (process.env.FIBARO_TOOLSET || 'intent').toLowerCase();
+    const intentTools: ListToolsResult = {
+        tools: [
+            {
+                name: 'fibaro_device',
+                description:
+                    'Device intent tool: list/get/control devices and perform common actions (turn on/off, set brightness/color/temperature, call arbitrary action, read Quick App Lua).',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        op: {
+                            type: 'string',
+                            description:
+                                'Operation: list|get|action|turn_on|turn_off|set_brightness|set_color|set_temperature|delete|get_lua',
+                        },
+                        device_id: { type: 'number', description: 'Device ID (required for most ops)' },
+                        action: { type: 'string', description: 'Fibaro action name (for op=action)' },
+                        args: { type: 'array', items: {}, description: 'Action arguments (for op=action)' },
+                        level: { type: 'number', minimum: 0, maximum: 100, description: 'Brightness % (op=set_brightness)' },
+                        r: { type: 'number', minimum: 0, maximum: 255 },
+                        g: { type: 'number', minimum: 0, maximum: 255 },
+                        b: { type: 'number', minimum: 0, maximum: 255 },
+                        w: { type: 'number', minimum: 0, maximum: 255, description: 'Optional white channel (0-255)' },
+                        temperature: { type: 'number', description: 'Target temperature °C (op=set_temperature)' },
+                        room_id: { type: 'number', description: 'Filter for op=list' },
+                        section_id: { type: 'number', description: 'Filter for op=list' },
+                        type: { type: 'string', description: 'Filter by Fibaro device type for op=list' },
+                        base_type: { type: 'string', description: 'Filter by baseType for op=list' },
+                        name: { type: 'string', description: 'Filter by name (case-insensitive, ignores diacritics) for op=list' },
+                        interface: { type: 'string', description: 'Filter by interface/capability for op=list' },
+                        parent_id: { type: 'number', description: 'Filter by parent device ID for op=list' },
+                        enabled: { type: 'boolean', description: 'Filter by enabled for op=list' },
+                        visible: { type: 'boolean', description: 'Filter by visible for op=list' },
+                        dead: { type: 'boolean', description: 'Filter by dead/unresponsive for op=list' },
+                        properties: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'For op=list: return only selected properties (same as list_devices)',
+                        },
+                    },
+                    required: ['op'],
+                },
+            },
+            {
+                name: 'fibaro_scene',
+                description:
+                    'Scene intent tool: list/get/run/stop scenes and manage Lua scenes (create, update Lua, get Lua, delete).',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        op: {
+                            type: 'string',
+                            description:
+                                'Operation: list|get|run|stop|get_lua|create|update_lua|delete',
+                        },
+                        scene_id: { type: 'number' },
+                        room_id: { type: 'number', description: 'Filter for op=list or target room for op=create/update_lua' },
+                        name: { type: 'string', description: 'Scene name (op=create/update_lua)' },
+                        lua: { type: 'string', description: 'Lua code (op=create/update_lua)' },
+                    },
+                    required: ['op'],
+                },
+            },
+            {
+                name: 'fibaro_variable',
+                description: 'Variable intent tool: list/get/set/create/delete global variables.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        op: { type: 'string', description: 'Operation: list|get|set|create|delete' },
+                        name: { type: 'string', description: 'Variable name' },
+                        value: { type: 'string', description: 'Variable value (op=set/create)' },
+                        variable: { type: 'object', description: 'Advanced create payload (op=create)' },
+                    },
+                    required: ['op'],
+                },
+            },
+            {
+                name: 'fibaro_quick_app',
+                description:
+                    'Quick App intent tool: list/create/update code/update variables/get lua/delete.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        op: { type: 'string', description: 'Operation: list|create|update_code|update_variables|get_lua|delete' },
+                        device_id: { type: 'number', description: 'Quick App device ID' },
+                        name: { type: 'string', description: 'Quick App name (op=create)' },
+                        type: { type: 'string', description: 'Quick App type (op=create)' },
+                        room_id: { type: 'number', description: 'Room ID (op=create)' },
+                        code: { type: 'string', description: 'Lua code (op=create/update_code)' },
+                        variables: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: { name: { type: 'string' }, value: {}, type: { type: 'string' } },
+                                required: ['name', 'value'],
+                            },
+                            description: 'Variables array (op=update_variables)',
+                        },
+                    },
+                    required: ['op'],
+                },
+            },
+            {
+                name: 'fibaro_home',
+                description:
+                    'Home/system intent tool: rooms/sections/users/profiles/notifications/alarms/zwave/backups/settings/weather/system info/custom events/plugins.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        op: {
+                            type: 'string',
+                            description:
+                                'Operation: system_info|weather|energy_panel|rooms|sections|create_room|update_room|delete_room|create_section|update_section|delete_section|users|create_user|update_user|delete_user|profiles|get_active_profile|set_active_profile|notifications|send_notification|alarms|arm_alarm|disarm_alarm|zwave_network|start_zwave_inclusion|stop_zwave_inclusion|start_zwave_exclusion|stop_zwave_exclusion|remove_failed_zwave_node|heal_zwave_network|create_backup|list_backups|restore_backup|get_settings|update_settings|restart_system|get_event_log|geofences|create_geofence|update_geofence|delete_geofence|plugins|install_plugin|uninstall_plugin|restart_plugin|trigger_custom_event|device_stats',
+                        },
+                        room_id: { type: 'number' },
+                        section_id: { type: 'number' },
+                        name: { type: 'string' },
+                        icon: { type: 'string' },
+                        user_id: { type: 'number' },
+                        username: { type: 'string' },
+                        password: { type: 'string' },
+                        email: { type: 'string' },
+                        type: { type: 'string' },
+                        profile_id: { type: 'number' },
+                        partition_id: { type: 'number' },
+                        node_id: { type: 'number' },
+                        backup_id: { type: 'string' },
+                        settings: { type: 'object' },
+                        from: { type: 'number' },
+                        to: { type: 'number' },
+                        limit: { type: 'number' },
+                        geofence_id: { type: 'number' },
+                        latitude: { type: 'number' },
+                        longitude: { type: 'number' },
+                        radius: { type: 'number' },
+                        plugin_id: { type: 'string' },
+                        url: { type: 'string' },
+                        event_name: { type: 'string' },
+                        data: { type: 'object' },
+                        notification: { type: 'object' },
+                        title: { type: 'string' },
+                        text: { type: 'string' },
+                        users: { type: 'array', items: { type: 'number' } },
+                        device_id: { type: 'number' },
+                        params: { type: 'object' },
+                    },
+                    required: ['op'],
+                },
+            },
+            {
+                name: 'find_by_name',
+                description:
+                    'Find devices, rooms, or scenes by name (case-insensitive, ignores diacritics). Returns ranked candidates.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        query: { type: 'string', description: 'Search query' },
+                        kinds: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Optional: Restrict search kinds (devices|rooms|scenes)',
+                        },
+                        limit: { type: 'number', description: 'Max results per kind (default: 20)' },
+                    },
+                    required: ['query'],
+                },
+            },
+            {
+                name: 'resolve_by_name',
+                description:
+                    'Resolve a single device by name (or multiple devices if the query is plural). Errors on ambiguity for singular queries.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        query: { type: 'string', description: 'Name query (e.g., "kitchen light")' },
+                        kind: {
+                            type: 'string',
+                            description: 'Optional: Restrict kind (device|room|scene). Default: device',
+                        },
+                    },
+                    required: ['query'],
+                },
+            },
+        ],
+    };
+
+    if (toolset === 'intent') {
+        return intentTools;
+    }
+
+    const legacy: ListToolsResult = {
         tools: [
             {
                 name: 'list_devices',
@@ -1164,6 +1355,12 @@ export function getTools(): ListToolsResult {
             },
         ],
     };
+
+    if (toolset === 'both') {
+        return { tools: [...intentTools.tools, ...legacy.tools] };
+    }
+
+    return legacy;
 }
 
 export function getResources(): ListResourcesResult {
@@ -1247,6 +1444,326 @@ export async function handleToolCall(
     name: string,
     args: any
 ): Promise<CallToolResult> {
+    if (name === 'fibaro_device') {
+        const op = (args?.op as string | undefined)?.toLowerCase();
+        if (!op) {
+            throw new McpError(ErrorCode.InvalidParams, 'fibaro_device: missing required parameter "op"');
+        }
+        switch (op) {
+            case 'list':
+                return handleToolCall(client, 'list_devices', args);
+            case 'get':
+                return handleToolCall(client, 'get_device', { device_id: args?.device_id });
+            case 'action':
+                return handleToolCall(client, 'control_device', {
+                    device_id: args?.device_id,
+                    action: args?.action,
+                    args: args?.args,
+                });
+            case 'turn_on':
+                return handleToolCall(client, 'turn_on', { device_id: args?.device_id });
+            case 'turn_off':
+                return handleToolCall(client, 'turn_off', { device_id: args?.device_id });
+            case 'set_brightness':
+                return handleToolCall(client, 'set_brightness', {
+                    device_id: args?.device_id,
+                    level: args?.level,
+                });
+            case 'set_color':
+                return handleToolCall(client, 'set_color', {
+                    device_id: args?.device_id,
+                    r: args?.r,
+                    g: args?.g,
+                    b: args?.b,
+                    w: args?.w,
+                });
+            case 'set_temperature':
+                return handleToolCall(client, 'set_temperature', {
+                    device_id: args?.device_id,
+                    temperature: args?.temperature,
+                });
+            case 'delete':
+                return handleToolCall(client, 'delete_device', { device_id: args?.device_id });
+            case 'get_lua':
+                return handleToolCall(client, 'get_device_lua', { device_id: args?.device_id });
+            default:
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text:
+                                `fibaro_device: unsupported op "${op}". Supported ops: list|get|action|turn_on|turn_off|set_brightness|set_color|set_temperature|delete|get_lua`,
+                        },
+                    ],
+                };
+        }
+    }
+
+    if (name === 'fibaro_scene') {
+        const op = (args?.op as string | undefined)?.toLowerCase();
+        if (!op) {
+            throw new McpError(ErrorCode.InvalidParams, 'fibaro_scene: missing required parameter "op"');
+        }
+        switch (op) {
+            case 'list':
+                return handleToolCall(client, 'list_scenes', { room_id: args?.room_id });
+            case 'get':
+                return handleToolCall(client, 'get_scene', { scene_id: args?.scene_id });
+            case 'run':
+                return handleToolCall(client, 'run_scene', { scene_id: args?.scene_id });
+            case 'stop':
+                return handleToolCall(client, 'stop_scene', { scene_id: args?.scene_id });
+            case 'get_lua':
+                return handleToolCall(client, 'get_scene_lua', { scene_id: args?.scene_id });
+            case 'create':
+                return handleToolCall(client, 'create_scene', {
+                    name: args?.name,
+                    room_id: args?.room_id,
+                    lua: args?.lua,
+                });
+            case 'update_lua':
+                return handleToolCall(client, 'update_scene_lua', {
+                    scene_id: args?.scene_id,
+                    lua: args?.lua,
+                    name: args?.name,
+                    room_id: args?.room_id,
+                });
+            case 'delete':
+                return handleToolCall(client, 'delete_scene', { scene_id: args?.scene_id });
+            default:
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text:
+                                `fibaro_scene: unsupported op "${op}". Supported ops: list|get|run|stop|get_lua|create|update_lua|delete`,
+                        },
+                    ],
+                };
+        }
+    }
+
+    if (name === 'fibaro_variable') {
+        const op = (args?.op as string | undefined)?.toLowerCase();
+        if (!op) {
+            throw new McpError(ErrorCode.InvalidParams, 'fibaro_variable: missing required parameter "op"');
+        }
+        switch (op) {
+            case 'list':
+                return handleToolCall(client, 'list_global_variables', {});
+            case 'get':
+                return handleToolCall(client, 'get_global_variable', { name: args?.name });
+            case 'set':
+                return handleToolCall(client, 'set_global_variable', { name: args?.name, value: args?.value });
+            case 'create':
+                return handleToolCall(client, 'create_global_variable', args?.variable ?? { name: args?.name, value: args?.value });
+            case 'delete':
+                return handleToolCall(client, 'delete_global_variable', { name: args?.name });
+            default:
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `fibaro_variable: unsupported op "${op}". Supported ops: list|get|set|create|delete`,
+                        },
+                    ],
+                };
+        }
+    }
+
+    if (name === 'fibaro_quick_app') {
+        const op = (args?.op as string | undefined)?.toLowerCase();
+        if (!op) {
+            throw new McpError(ErrorCode.InvalidParams, 'fibaro_quick_app: missing required parameter "op"');
+        }
+        switch (op) {
+            case 'list':
+                return handleToolCall(client, 'list_quick_apps', {});
+            case 'create':
+                return handleToolCall(client, 'create_quick_app', {
+                    name: args?.name,
+                    type: args?.type,
+                    room_id: args?.room_id,
+                    code: args?.code,
+                });
+            case 'update_code':
+                return handleToolCall(client, 'update_quick_app_code', { device_id: args?.device_id, code: args?.code });
+            case 'update_variables':
+                return handleToolCall(client, 'update_quick_app_variables', {
+                    device_id: args?.device_id,
+                    variables: args?.variables,
+                });
+            case 'get_lua':
+                return handleToolCall(client, 'get_device_lua', { device_id: args?.device_id });
+            case 'delete':
+                return handleToolCall(client, 'delete_device', { device_id: args?.device_id });
+            default:
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text:
+                                `fibaro_quick_app: unsupported op "${op}". Supported ops: list|create|update_code|update_variables|get_lua|delete`,
+                        },
+                    ],
+                };
+        }
+    }
+
+    if (name === 'fibaro_home') {
+        const op = (args?.op as string | undefined)?.toLowerCase();
+        if (!op) {
+            throw new McpError(ErrorCode.InvalidParams, 'fibaro_home: missing required parameter "op"');
+        }
+        switch (op) {
+            case 'system_info':
+                return handleToolCall(client, 'get_system_info', {});
+            case 'weather':
+                return handleToolCall(client, 'get_weather', {});
+            case 'energy_panel':
+                return handleToolCall(client, 'get_energy_panel', {});
+            case 'rooms':
+                return handleToolCall(client, 'list_rooms', {});
+            case 'sections':
+                return handleToolCall(client, 'list_sections', {});
+            case 'create_room':
+                return handleToolCall(client, 'create_room', {
+                    name: args?.name,
+                    section_id: args?.section_id,
+                    icon: args?.icon,
+                });
+            case 'update_room':
+                return handleToolCall(client, 'update_room', {
+                    room_id: args?.room_id,
+                    name: args?.name,
+                    section_id: args?.section_id,
+                    icon: args?.icon,
+                });
+            case 'delete_room':
+                return handleToolCall(client, 'delete_room', { room_id: args?.room_id });
+            case 'create_section':
+                return handleToolCall(client, 'create_section', { name: args?.name, icon: args?.icon });
+            case 'update_section':
+                return handleToolCall(client, 'update_section', { section_id: args?.section_id, name: args?.name, icon: args?.icon });
+            case 'delete_section':
+                return handleToolCall(client, 'delete_section', { section_id: args?.section_id });
+            case 'users':
+                return handleToolCall(client, 'list_users', {});
+            case 'create_user':
+                return handleToolCall(client, 'create_user', {
+                    name: args?.name,
+                    username: args?.username,
+                    password: args?.password,
+                    email: args?.email,
+                    type: args?.type,
+                });
+            case 'update_user':
+                return handleToolCall(client, 'update_user', {
+                    user_id: args?.user_id,
+                    name: args?.name,
+                    email: args?.email,
+                    password: args?.password,
+                });
+            case 'delete_user':
+                return handleToolCall(client, 'delete_user', { user_id: args?.user_id });
+            case 'profiles':
+                return handleToolCall(client, 'list_profiles', {});
+            case 'get_active_profile':
+                return handleToolCall(client, 'get_active_profile', {});
+            case 'set_active_profile':
+                return handleToolCall(client, 'set_active_profile', { profile_id: args?.profile_id });
+            case 'notifications':
+                return handleToolCall(client, 'list_notifications', {});
+            case 'send_notification':
+                return handleToolCall(client, 'send_notification', {
+                    type: args?.type,
+                    title: args?.title,
+                    text: args?.text,
+                    users: args?.users,
+                });
+            case 'alarms':
+                return handleToolCall(client, 'list_alarms', {});
+            case 'arm_alarm':
+                return handleToolCall(client, 'arm_alarm', { partition_id: args?.partition_id });
+            case 'disarm_alarm':
+                return handleToolCall(client, 'disarm_alarm', { partition_id: args?.partition_id });
+            case 'zwave_network':
+                return handleToolCall(client, 'get_zwave_network', {});
+            case 'start_zwave_inclusion':
+                return handleToolCall(client, 'start_zwave_inclusion', {});
+            case 'stop_zwave_inclusion':
+                return handleToolCall(client, 'stop_zwave_inclusion', {});
+            case 'start_zwave_exclusion':
+                return handleToolCall(client, 'start_zwave_exclusion', {});
+            case 'stop_zwave_exclusion':
+                return handleToolCall(client, 'stop_zwave_exclusion', {});
+            case 'remove_failed_zwave_node':
+                return handleToolCall(client, 'remove_failed_zwave_node', { node_id: args?.node_id });
+            case 'heal_zwave_network':
+                return handleToolCall(client, 'heal_zwave_network', {});
+            case 'create_backup':
+                return handleToolCall(client, 'create_backup', {});
+            case 'list_backups':
+                return handleToolCall(client, 'list_backups', {});
+            case 'restore_backup':
+                return handleToolCall(client, 'restore_backup', { backup_id: args?.backup_id });
+            case 'get_settings':
+                return handleToolCall(client, 'get_settings', {});
+            case 'update_settings':
+                return handleToolCall(client, 'update_settings', { settings: args?.settings });
+            case 'restart_system':
+                return handleToolCall(client, 'restart_system', {});
+            case 'get_event_log':
+                return handleToolCall(client, 'get_event_log', {
+                    from: args?.from,
+                    to: args?.to,
+                    type: args?.type,
+                    limit: args?.limit,
+                });
+            case 'geofences':
+                return handleToolCall(client, 'list_geofences', {});
+            case 'create_geofence':
+                return handleToolCall(client, 'create_geofence', {
+                    name: args?.name,
+                    latitude: args?.latitude,
+                    longitude: args?.longitude,
+                    radius: args?.radius,
+                });
+            case 'update_geofence':
+                return handleToolCall(client, 'update_geofence', {
+                    geofence_id: args?.geofence_id,
+                    name: args?.name,
+                    latitude: args?.latitude,
+                    longitude: args?.longitude,
+                    radius: args?.radius,
+                });
+            case 'delete_geofence':
+                return handleToolCall(client, 'delete_geofence', { geofence_id: args?.geofence_id });
+            case 'plugins':
+                return handleToolCall(client, 'list_plugins', {});
+            case 'install_plugin':
+                return handleToolCall(client, 'install_plugin', { url: args?.url });
+            case 'uninstall_plugin':
+                return handleToolCall(client, 'uninstall_plugin', { plugin_id: args?.plugin_id });
+            case 'restart_plugin':
+                return handleToolCall(client, 'restart_plugin', { plugin_id: args?.plugin_id });
+            case 'trigger_custom_event':
+                return handleToolCall(client, 'trigger_custom_event', { event_name: args?.event_name, data: args?.data });
+            case 'device_stats':
+                return handleToolCall(client, 'get_device_stats', { device_id: args?.device_id, params: args?.params });
+            default:
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text:
+                                `fibaro_home: unsupported op "${op}". Supported ops include: system_info|weather|energy_panel|rooms|sections|...|device_stats`,
+                        },
+                    ],
+                };
+        }
+    }
+
     switch (name) {
         case 'list_devices': {
             let devices = await client.getDevices();
