@@ -67,9 +67,13 @@ export interface GlobalVariable {
 export class FibaroClient {
   private client: AxiosInstance;
   private config: FibaroConfig;
+  private cacheTtlMs: number;
+  private cache: Map<string, { expiresAt: number; value?: any; inFlight?: Promise<any> }>;
 
   constructor(config: FibaroConfig) {
     this.config = config;
+    this.cacheTtlMs = Number(process.env.FIBARO_CACHE_TTL_MS || 30000);
+    this.cache = new Map();
     const protocol = config.https !== false ? 'https' : 'http';
     const port = config.port || (config.https !== false ? 443 : 80);
     const baseURL = `${protocol}://${config.host}:${port}/api`;
@@ -87,10 +91,50 @@ export class FibaroClient {
     });
   }
 
+  private invalidateCache(keys: string[]) {
+    for (const key of keys) {
+      this.cache.delete(key);
+    }
+  }
+
+  private async getCached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+    const ttlMs = this.cacheTtlMs;
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+      return fetcher();
+    }
+
+    const now = Date.now();
+    const existing = this.cache.get(key);
+    if (existing && existing.value !== undefined && existing.expiresAt > now) {
+      return existing.value as T;
+    }
+    if (existing?.inFlight) {
+      return existing.inFlight as Promise<T>;
+    }
+
+    const inFlight = (async () => {
+      try {
+        const value = await fetcher();
+        this.cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+        return value;
+      } finally {
+        const curr = this.cache.get(key);
+        if (curr?.inFlight) {
+          this.cache.set(key, { value: curr.value, expiresAt: curr.expiresAt });
+        }
+      }
+    })();
+
+    this.cache.set(key, { expiresAt: now + ttlMs, inFlight });
+    return inFlight;
+  }
+
   // Device methods
   async getDevices(): Promise<Device[]> {
-    const response = await this.client.get('/devices');
-    return response.data;
+    return this.getCached('devices:list', async () => {
+      const response = await this.client.get('/devices');
+      return response.data;
+    });
   }
 
   async getDevice(deviceId: number): Promise<Device> {
@@ -102,6 +146,7 @@ export class FibaroClient {
     const response = await this.client.post(`/devices/${deviceId}/action/${action}`, {
       args: args || [],
     });
+    this.invalidateCache(['devices:list']);
     return response.data;
   }
 
@@ -109,6 +154,7 @@ export class FibaroClient {
     await this.client.put(`/devices/${deviceId}/properties/${property}`, {
       value,
     });
+    this.invalidateCache(['devices:list']);
   }
 
   async getDeviceConfig(deviceId: number): Promise<any> {
@@ -118,6 +164,7 @@ export class FibaroClient {
 
   async updateDeviceConfig(deviceId: number, config: Record<string, any>): Promise<void> {
     await this.client.put(`/devices/${deviceId}`, { properties: config });
+    this.invalidateCache(['devices:list']);
   }
 
   async getDeviceActions(deviceId: number): Promise<any> {
@@ -127,6 +174,7 @@ export class FibaroClient {
 
   async deleteDevice(deviceId: number): Promise<void> {
     await this.client.delete(`/devices/${deviceId}`);
+    this.invalidateCache(['devices:list']);
   }
 
   async getDeviceStats(deviceId: number, params?: {
@@ -140,8 +188,10 @@ export class FibaroClient {
 
   // Room methods
   async getRooms(): Promise<Room[]> {
-    const response = await this.client.get('/rooms');
-    return response.data;
+    return this.getCached('rooms:list', async () => {
+      const response = await this.client.get('/rooms');
+      return response.data;
+    });
   }
 
   async getRoom(roomId: number): Promise<Room> {
@@ -151,22 +201,27 @@ export class FibaroClient {
 
   async createRoom(room: { name: string; sectionID: number; icon?: string }): Promise<Room> {
     const response = await this.client.post('/rooms', room);
+    this.invalidateCache(['rooms:list', 'devices:list']);
     return response.data;
   }
 
   async updateRoom(roomId: number, updates: { name?: string; sectionID?: number; icon?: string }): Promise<Room> {
     const response = await this.client.put(`/rooms/${roomId}`, updates);
+    this.invalidateCache(['rooms:list', 'devices:list']);
     return response.data;
   }
 
   async deleteRoom(roomId: number): Promise<void> {
     await this.client.delete(`/rooms/${roomId}`);
+    this.invalidateCache(['rooms:list', 'devices:list']);
   }
 
   // Section methods
   async getSections(): Promise<Section[]> {
-    const response = await this.client.get('/sections');
-    return response.data;
+    return this.getCached('sections:list', async () => {
+      const response = await this.client.get('/sections');
+      return response.data;
+    });
   }
 
   async getSection(sectionId: number): Promise<Section> {
@@ -176,16 +231,19 @@ export class FibaroClient {
 
   async createSection(section: { name: string; icon?: string }): Promise<Section> {
     const response = await this.client.post('/sections', section);
+    this.invalidateCache(['sections:list', 'rooms:list', 'devices:list']);
     return response.data;
   }
 
   async updateSection(sectionId: number, updates: { name?: string; icon?: string }): Promise<Section> {
     const response = await this.client.put(`/sections/${sectionId}`, updates);
+    this.invalidateCache(['sections:list', 'rooms:list', 'devices:list']);
     return response.data;
   }
 
   async deleteSection(sectionId: number): Promise<void> {
     await this.client.delete(`/sections/${sectionId}`);
+    this.invalidateCache(['sections:list', 'rooms:list', 'devices:list']);
   }
 
   // Scene methods
