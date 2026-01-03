@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { getResources, getTools, handleResourceRead, handleToolCall } from './mcp-handlers.js';
 
@@ -154,8 +154,31 @@ function makeClient(overrides: Partial<any> = {}) {
 }
 
 describe('mcp-handlers', () => {
+    const prevEnvToolset = process.env.FIBARO_TOOLSET;
+
+    afterEach(() => {
+        process.env.FIBARO_TOOLSET = prevEnvToolset;
+        vi.restoreAllMocks();
+    });
+
     it('getTools returns a tools list containing find_by_name and resolve_by_name', () => {
         const res = getTools();
+        expect(res.tools.some((t) => t.name === 'find_by_name')).toBe(true);
+        expect(res.tools.some((t) => t.name === 'resolve_by_name')).toBe(true);
+    });
+
+    it('getTools respects FIBARO_TOOLSET=legacy and does not include intent tools', () => {
+        process.env.FIBARO_TOOLSET = 'legacy';
+        const res = getTools();
+        expect(res.tools.some((t) => t.name === 'list_devices')).toBe(true);
+        expect(res.tools.some((t) => t.name === 'fibaro_device')).toBe(false);
+    });
+
+    it('getTools respects FIBARO_TOOLSET=both and includes both intent and legacy tools', () => {
+        process.env.FIBARO_TOOLSET = 'both';
+        const res = getTools();
+        expect(res.tools.some((t) => t.name === 'list_devices')).toBe(true);
+        expect(res.tools.some((t) => t.name === 'fibaro_device')).toBe(true);
         expect(res.tools.some((t) => t.name === 'find_by_name')).toBe(true);
         expect(res.tools.some((t) => t.name === 'resolve_by_name')).toBe(true);
     });
@@ -193,6 +216,351 @@ describe('mcp-handlers', () => {
         const text = (out.content[0] as any).text as string;
         expect(text).toContain('Kitchen Lamp');
         expect(text).not.toContain('Bedroom Lamp');
+    });
+
+    it('intent routing: fibaro_device supports common ops', async () => {
+        const turnOn = vi.fn(async () => { });
+        const turnOff = vi.fn(async () => { });
+        const callAction = vi.fn(async () => ({ ok: true }));
+        const setBrightness = vi.fn(async () => { });
+        const setColor = vi.fn(async () => { });
+        const setTemperature = vi.fn(async () => { });
+        const getDevice = vi.fn(async (id: number) => ({ id, name: `Device ${id}` }));
+        const deleteDevice = vi.fn(async () => { });
+        const getDeviceLua = vi.fn(async () => ({ device: { id: 1, name: 'QA' }, code: '', quickAppVariables: [] }));
+        const client = makeClient({
+            turnOn,
+            turnOff,
+            callAction,
+            setBrightness,
+            setColor,
+            setTemperature,
+            getDevice,
+            deleteDevice,
+            getDeviceLua,
+        });
+
+        await handleToolCall(client, 'fibaro_device', { op: 'turn_on', device_id: 1 });
+        expect(turnOn).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'turn_off', device_id: 1 });
+        expect(turnOff).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'action', device_id: 1, action: 'x', args: [1] });
+        expect(callAction).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'set_brightness', device_id: 1, level: 50 });
+        expect(setBrightness).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'set_color', device_id: 1, r: 1, g: 2, b: 3, w: 4 });
+        expect(setColor).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'set_temperature', device_id: 1, temperature: 21 });
+        expect(setTemperature).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'get', device_id: 1 });
+        expect(getDevice).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'get_lua', device_id: 1 });
+        expect(getDeviceLua).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'delete', device_id: 1 });
+        expect(deleteDevice).toHaveBeenCalled();
+
+        const unknown = await handleToolCall(client, 'fibaro_device', { op: 'nope' });
+        expect((unknown.content[0] as any).text).toContain('unsupported op');
+    });
+
+    it('intent routing: fibaro_scene supports list/get/run/stop/create/update_lua/delete and unknown op', async () => {
+        const runScene = vi.fn(async () => { });
+        const stopScene = vi.fn(async () => { });
+        const createScene = vi.fn(async () => ({ id: 9, name: 'N' }));
+        const updateScene = vi.fn(async () => ({ id: 9, name: 'N' }));
+        const deleteScene = vi.fn(async () => { });
+        const getScene = vi.fn(async (id: number) => ({ id, name: 'S', roomID: 10, lua: '--' }));
+        const client = makeClient({ runScene, stopScene, createScene, updateScene, deleteScene, getScene });
+
+        await handleToolCall(client, 'fibaro_scene', { op: 'list' });
+        await handleToolCall(client, 'fibaro_scene', { op: 'get', scene_id: 5 });
+        await handleToolCall(client, 'fibaro_scene', { op: 'run', scene_id: 5 });
+        expect(runScene).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_scene', { op: 'stop', scene_id: 5 });
+        expect(stopScene).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_scene', { op: 'create', name: 'N', room_id: 10, lua: '' });
+        expect(createScene).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_scene', { op: 'update_lua', scene_id: 5, lua: '--' });
+        expect(updateScene).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_scene', { op: 'delete', scene_id: 5 });
+        expect(deleteScene).toHaveBeenCalled();
+
+        const luaOut = await handleToolCall(client, 'fibaro_scene', { op: 'get_lua', scene_id: 5 });
+        expect(getScene).toHaveBeenCalled();
+        expect((luaOut.content[0] as any).text).toContain('--');
+
+        const unknown = await handleToolCall(client, 'fibaro_scene', { op: 'nope' });
+        expect((unknown.content[0] as any).text).toContain('unsupported op');
+    });
+
+    it('intent routing: fibaro_variable supports list/get/set/create/delete and unknown op', async () => {
+        const setGlobalVariable = vi.fn(async () => { });
+        const createGlobalVariable = vi.fn(async () => ({ name: 'x' }));
+        const deleteGlobalVariable = vi.fn(async () => { });
+        const client = makeClient({ setGlobalVariable, createGlobalVariable, deleteGlobalVariable });
+
+        await handleToolCall(client, 'fibaro_variable', { op: 'list' });
+        await handleToolCall(client, 'fibaro_variable', { op: 'get', name: 'x' });
+        await handleToolCall(client, 'fibaro_variable', { op: 'set', name: 'x', value: 'y' });
+        expect(setGlobalVariable).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_variable', { op: 'create', name: 'x', value: 'y' });
+        expect(createGlobalVariable).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_variable', {
+            op: 'create',
+            variable: { name: 'x', value: 'y', isEnum: false },
+        });
+        expect(createGlobalVariable).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_variable', { op: 'delete', name: 'x' });
+        expect(deleteGlobalVariable).toHaveBeenCalled();
+
+        const unknown = await handleToolCall(client, 'fibaro_variable', { op: 'nope' });
+        expect((unknown.content[0] as any).text).toContain('unsupported op');
+    });
+
+    it('intent routing: fibaro_quick_app supports list/create/update_code/update_variables/get_lua/delete and unknown op', async () => {
+        const getQuickApps = vi.fn(async () => []);
+        const createQuickApp = vi.fn(async () => ({ id: 8, name: 'QA' }));
+        const updateQuickAppCode = vi.fn(async () => { });
+        const updateQuickAppVariables = vi.fn(async () => { });
+        const getDeviceLua = vi.fn(async () => ({ device: { id: 1, name: 'QA' }, code: '', quickAppVariables: [] }));
+        const deleteDevice = vi.fn(async () => { });
+        const client = makeClient({
+            getQuickApps,
+            createQuickApp,
+            updateQuickAppCode,
+            updateQuickAppVariables,
+            getDeviceLua,
+            deleteDevice,
+        });
+
+        await handleToolCall(client, 'fibaro_quick_app', { op: 'list' });
+        expect(getQuickApps).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_quick_app', { op: 'create', name: 'QA', type: 't', code: '' });
+        expect(createQuickApp).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_quick_app', { op: 'update_code', device_id: 1, code: '' });
+        expect(updateQuickAppCode).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_quick_app', {
+            op: 'update_variables',
+            device_id: 1,
+            variables: [{ name: 'x', value: 'y' }],
+        });
+        expect(updateQuickAppVariables).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_quick_app', { op: 'get_lua', device_id: 1 });
+        expect(getDeviceLua).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_quick_app', { op: 'delete', device_id: 1 });
+        expect(deleteDevice).toHaveBeenCalled();
+
+        const unknown = await handleToolCall(client, 'fibaro_quick_app', { op: 'nope' });
+        expect((unknown.content[0] as any).text).toContain('unsupported op');
+    });
+
+    it('intent routing: fibaro_home supports representative ops and unknown op', async () => {
+        const getSystemInfo = vi.fn(async () => ({ ok: true }));
+        const getWeather = vi.fn(async () => ({ ok: true }));
+        const getEnergyPanel = vi.fn(async () => ({ ok: true }));
+        const getRooms = vi.fn(async () => [{ id: 10, name: 'Kitchen', sectionID: 100 }]);
+        const getSections = vi.fn(async () => [{ id: 100, name: 'Home' }]);
+        const createRoom = vi.fn(async () => ({ id: 12, name: 'New Room' }));
+        const updateRoom = vi.fn(async () => ({ id: 12, name: 'Updated Room' }));
+        const deleteRoom = vi.fn(async () => { });
+        const createSection = vi.fn(async () => ({ id: 101, name: 'New Section' }));
+        const updateSection = vi.fn(async () => ({ id: 101, name: 'Updated Section' }));
+        const deleteSection = vi.fn(async () => { });
+        const getUsers = vi.fn(async () => []);
+        const createUser = vi.fn(async () => ({ id: 55, name: 'User' }));
+        const updateUser = vi.fn(async () => ({}));
+        const deleteUser = vi.fn(async () => { });
+        const getProfiles = vi.fn(async () => [{ id: 1, name: 'Home' }]);
+        const getActiveProfile = vi.fn(async () => ({ id: 1, name: 'Home' }));
+        const setActiveProfile = vi.fn(async () => { });
+        const getNotifications = vi.fn(async () => [{ id: 1, text: 'N' }]);
+        const sendNotification = vi.fn(async () => ({}));
+        const getAlarms = vi.fn(async () => ({}));
+        const armAlarm = vi.fn(async () => { });
+        const disarmAlarm = vi.fn(async () => { });
+        const getZWaveNetwork = vi.fn(async () => ({ ok: true }));
+        const startZWaveInclusion = vi.fn(async () => { });
+        const stopZWaveInclusion = vi.fn(async () => { });
+        const startZWaveExclusion = vi.fn(async () => { });
+        const stopZWaveExclusion = vi.fn(async () => { });
+        const removeFailedZWaveNode = vi.fn(async () => { });
+        const healZWaveNetwork = vi.fn(async () => { });
+        const createBackup = vi.fn(async () => ({ id: 'b' }));
+        const getBackups = vi.fn(async () => [{ id: 'b' }]);
+        const restoreBackup = vi.fn(async () => { });
+        const getSettings = vi.fn(async () => ({ ok: true }));
+        const updateSettings = vi.fn(async () => { });
+        const restartSystem = vi.fn(async () => { });
+        const getEventLog = vi.fn(async () => [{ id: 1 }]);
+        const getGeofences = vi.fn(async () => [{ id: 1, name: 'G' }]);
+        const createGeofence = vi.fn(async () => ({ id: 1, name: 'G' }));
+        const updateGeofence = vi.fn(async () => ({}));
+        const deleteGeofence = vi.fn(async () => { });
+        const getPlugins = vi.fn(async () => [{ id: 'p' }]);
+        const installPlugin = vi.fn(async () => ({}));
+        const uninstallPlugin = vi.fn(async () => ({}));
+        const restartPlugin = vi.fn(async () => ({}));
+        const triggerCustomEvent = vi.fn(async () => ({}));
+        const getDeviceStats = vi.fn(async () => ({}));
+        const client = makeClient({
+            getSystemInfo,
+            getWeather,
+            getEnergyPanel,
+            getRooms,
+            getSections,
+            createRoom,
+            updateRoom,
+            deleteRoom,
+            createSection,
+            updateSection,
+            deleteSection,
+            getUsers,
+            createUser,
+            updateUser,
+            deleteUser,
+            getProfiles,
+            getActiveProfile,
+            setActiveProfile,
+            getNotifications,
+            sendNotification,
+            getAlarms,
+            armAlarm,
+            disarmAlarm,
+            getZWaveNetwork,
+            startZWaveInclusion,
+            stopZWaveInclusion,
+            startZWaveExclusion,
+            stopZWaveExclusion,
+            removeFailedZWaveNode,
+            healZWaveNetwork,
+            createBackup,
+            getBackups,
+            restoreBackup,
+            getSettings,
+            updateSettings,
+            restartSystem,
+            getEventLog,
+            getGeofences,
+            createGeofence,
+            updateGeofence,
+            deleteGeofence,
+            getPlugins,
+            installPlugin,
+            uninstallPlugin,
+            restartPlugin,
+            triggerCustomEvent,
+            getDeviceStats,
+        });
+
+        await handleToolCall(client, 'fibaro_home', { op: 'system_info' });
+        expect(getSystemInfo).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'weather' });
+        expect(getWeather).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'energy_panel' });
+        expect(getEnergyPanel).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'rooms' });
+        expect(getRooms).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'sections' });
+        expect(getSections).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'create_room', name: 'New Room', section_id: 100 });
+        expect(createRoom).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'update_room', room_id: 12, name: 'Updated Room' });
+        expect(updateRoom).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'delete_room', room_id: 12 });
+        expect(deleteRoom).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'create_section', name: 'New Section' });
+        expect(createSection).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'update_section', section_id: 101, name: 'Updated Section' });
+        expect(updateSection).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'delete_section', section_id: 101 });
+        expect(deleteSection).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'users' });
+        expect(getUsers).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'create_user', name: 'User', username: 'u', password: 'p' });
+        expect(createUser).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'update_user', user_id: 55, name: 'User' });
+        expect(updateUser).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'delete_user', user_id: 55 });
+        expect(deleteUser).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'profiles' });
+        expect(getProfiles).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'get_active_profile' });
+        expect(getActiveProfile).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'set_active_profile', profile_id: 1 });
+        expect(setActiveProfile).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'notifications' });
+        expect(getNotifications).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'send_notification', type: 'info', text: 'x' });
+        expect(sendNotification).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'alarms' });
+        expect(getAlarms).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'arm_alarm', partition_id: 1 });
+        expect(armAlarm).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'disarm_alarm', partition_id: 1 });
+        expect(disarmAlarm).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'zwave_network' });
+        expect(getZWaveNetwork).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'start_zwave_inclusion' });
+        expect(startZWaveInclusion).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'stop_zwave_inclusion' });
+        expect(stopZWaveInclusion).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'start_zwave_exclusion' });
+        expect(startZWaveExclusion).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'stop_zwave_exclusion' });
+        expect(stopZWaveExclusion).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'remove_failed_zwave_node', node_id: 1 });
+        expect(removeFailedZWaveNode).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'heal_zwave_network' });
+        expect(healZWaveNetwork).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'create_backup' });
+        expect(createBackup).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'list_backups' });
+        expect(getBackups).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'restore_backup', backup_id: 'b' });
+        expect(restoreBackup).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'get_settings' });
+        expect(getSettings).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'update_settings', settings: { a: 1 } });
+        expect(updateSettings).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'restart_system' });
+        expect(restartSystem).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'get_event_log', from: 0, to: 1, limit: 1 });
+        expect(getEventLog).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'geofences' });
+        expect(getGeofences).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'create_geofence', name: 'G', latitude: 1, longitude: 2, radius: 3 });
+        expect(createGeofence).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'update_geofence', geofence_id: 1, name: 'G' });
+        expect(updateGeofence).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'delete_geofence', geofence_id: 1 });
+        expect(deleteGeofence).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'plugins' });
+        expect(getPlugins).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'install_plugin', url: 'https://example.com/x' });
+        expect(installPlugin).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'uninstall_plugin', plugin_id: 'p' });
+        expect(uninstallPlugin).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'restart_plugin', plugin_id: 'p' });
+        expect(restartPlugin).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'trigger_custom_event', event_name: 'x', data: { a: 1 } });
+        expect(triggerCustomEvent).toHaveBeenCalled();
+        await handleToolCall(client, 'fibaro_home', { op: 'device_stats', device_id: 1, params: { x: 1 } });
+        expect(getDeviceStats).toHaveBeenCalled();
+
+        const unknown = await handleToolCall(client, 'fibaro_home', { op: 'nope' });
+        expect((unknown.content[0] as any).text).toContain('unsupported op');
     });
 
     it('handleToolCall list_devices covers additional filter branches', async () => {
