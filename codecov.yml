@@ -5,7 +5,8 @@ coverage:
         informational: true
     patch:
       default:
-        informational: true
+        informational: false
+        target: 80%
 
 comment:
   layout: "reach,diff,flags,tree"
