@@ -638,6 +638,62 @@ describe('mcp-handlers', () => {
         expect(parsed.devices[0].name).toBe('Kitchen Lamp');
     });
 
+    it('handleToolCall list_devices with visible filter', async () => {
+        const client = makeClient();
+        const result = await handleToolCall(client, 'list_devices', { visible: true });
+        expect((result.content[0] as any).text).toContain('Kitchen Lamp');
+    });
+
+    it('handleToolCall list_scenes with room_id filter', async () => {
+        const client = makeClient();
+        const result = await handleToolCall(client, 'list_scenes', { room_id: 10 });
+        expect((result.content[0] as any).text).toContain('"id": 5');
+    });
+
+    it('handleToolCall fibaro_device with list operation', async () => {
+        const client = makeClient();
+        const result = await handleToolCall(client, 'fibaro_device', { op: 'list' });
+        expect((result.content[0] as any).text).toContain('Kitchen Lamp');
+    });
+
+    it('handleToolCall format=json wraps result in JSON', async () => {
+        const client = makeClient();
+        const result = await handleToolCall(client, 'get_device', { device_id: 1, format: 'json' });
+        const parsed = JSON.parse((result.content[0] as any).text);
+        expect(parsed.content).toBeDefined();
+    });
+
+    it('handleToolCall resolve_by_name errors on no rooms match', async () => {
+        const client = makeClient();
+        await expect(handleToolCall(client, 'resolve_by_name', { query: 'nonexistent', kind: 'rooms' }))
+            .rejects.toMatchObject({ code: ErrorCode.InvalidRequest, message: expect.stringContaining('No rooms matched') });
+    });
+
+    it('handleToolCall resolve_by_name errors on multiple rooms match', async () => {
+        const client = makeClient();
+        // makeClient() provides 'Kitchen' and 'Bedroom' rooms - query with 'e' matches both
+        await expect(handleToolCall(client, 'resolve_by_name', { query: 'e', kind: 'rooms' }))
+            .rejects.toMatchObject({ code: ErrorCode.InvalidRequest, message: expect.stringContaining('Ambiguous room query') });
+    });
+
+    it('handleToolCall resolve_by_name errors on ambiguous kind=both', async () => {
+        const client = makeClient();
+        await expect(handleToolCall(client, 'resolve_by_name', { query: 'k', kind: 'both' }))
+            .rejects.toMatchObject({ code: ErrorCode.InvalidRequest, message: expect.stringContaining('Ambiguous query') });
+    });
+
+    it('handleToolCall resolve_by_name errors on no devices match', async () => {
+        const client = makeClient();
+        await expect(handleToolCall(client, 'resolve_by_name', { query: 'nonexistentdevice', kind: 'devices' }))
+            .rejects.toMatchObject({ code: ErrorCode.InvalidRequest, message: expect.stringContaining('No devices matched') });
+    });
+
+    it('handleToolCall resolve_by_name errors on no matches for kind=both', async () => {
+        const client = makeClient();
+        await expect(handleToolCall(client, 'resolve_by_name', { query: 'zzzzzzz', kind: 'both' }))
+            .rejects.toMatchObject({ code: ErrorCode.InvalidRequest, message: expect.stringContaining('No rooms or devices matched') });
+    });
+
     it('all tool definitions are callable with minimal schema-derived args', async () => {
         const tools = getTools().tools;
         const client = makeClient();
