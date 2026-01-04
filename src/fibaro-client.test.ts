@@ -787,6 +787,29 @@ describe('FibaroClient API methods', () => {
     expect(scope.isDone()).toBe(true);
   });
 
+  it('light control methods - turnOn, turnOff, setBrightness, setColor', async () => {
+    const scope = nock('http://fibaro.test:80')
+      .post('/api/devices/1/action/turnOn', { args: [] })
+      .once()
+      .reply(200, {})
+      .post('/api/devices/1/action/turnOff', { args: [] })
+      .once()
+      .reply(200, {})
+      .post('/api/devices/1/action/setValue', { args: [50] })
+      .once()
+      .reply(200, {})
+      .post('/api/devices/1/action/setColor', { args: [255, 128, 64, 32] })
+      .once()
+      .reply(200, {});
+
+    const client = makeClient();
+    await client.turnOn(1);
+    await client.turnOff(1);
+    await client.setBrightness(1, 50);
+    await client.setColor(1, 255, 128, 64, 32);
+    expect(scope.isDone()).toBe(true);
+  });
+
   it('scene lifecycle and actions', async () => {
     const scope = nock('http://fibaro.test:80')
       .post('/api/scenes', {

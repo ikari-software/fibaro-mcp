@@ -167,6 +167,46 @@ describe('index wiring', () => {
         spy.mockRestore();
     });
 
+    it('initializeClient handles FIBARO_CONFIG with non-object JSON', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        const p = join(tmpdir(), `fibaro-mcp-test-array-${Date.now()}.json`);
+        writeFileSync(p, 'null', 'utf8');
+        process.env.FIBARO_CONFIG = p;
+        process.env.FIBARO_HOST = 'test';
+        process.env.FIBARO_USERNAME = 'u';
+        process.env.FIBARO_PASSWORD = 'p';
+
+        expect(() => server.initializeClient()).not.toThrow();
+    });
+
+    it('initializeClient uses valid object from FIBARO_CONFIG', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        const p = join(tmpdir(), `fibaro-mcp-test-obj-${Date.now()}.json`);
+        writeFileSync(p, JSON.stringify({ host: 'config-host', username: 'config-user', password: 'config-pass' }), 'utf8');
+        process.env.FIBARO_CONFIG = p;
+        delete process.env.FIBARO_HOST;
+        delete process.env.FIBARO_USERNAME;
+        delete process.env.FIBARO_PASSWORD;
+
+        server.initializeClient();
+        expect(server.fibaroClient).toBeDefined();
+    });
+
+    it('handleToolCall allows first_run tool without client', async () => {
+        const { CallToolRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+        const mod = await import('./index.js');
+        new mod.FibaroMCPServer();
+
+        const handler = lastServerInstance.handlers.get(CallToolRequestSchema);
+        const result = await handler({ params: { name: 'first_run', arguments: {} } });
+        expect(result).toBeDefined();
+        expect(result.content).toBeDefined();
+    });
+
     it('main guard runs when argv[1] matches module path', async () => {
         // Trigger the main guard by setting argv[1] to this module path.
         // This should construct a server and call run().
