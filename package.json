@@ -7,6 +7,18 @@
   "bin": {
     "fibaro-mcp": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "QUICKSTART.md",
+    "EXAMPLES.md",
+    "FEATURES.md",
+    "LUA_MANAGEMENT.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -35,6 +47,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "axios": "^1.7.9",
+    "dotenv": "^16.4.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

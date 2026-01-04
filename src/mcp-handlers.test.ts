@@ -161,6 +161,17 @@ describe('mcp-handlers', () => {
         vi.restoreAllMocks();
     });
 
+    it('intent routing: missing op throws InvalidParams for intent tools', async () => {
+        const { McpError } = await import('@modelcontextprotocol/sdk/types.js');
+        const client = makeClient();
+
+        await expect(handleToolCall(client as any, 'fibaro_device', {})).rejects.toBeInstanceOf(McpError);
+        await expect(handleToolCall(client as any, 'fibaro_scene', {})).rejects.toBeInstanceOf(McpError);
+        await expect(handleToolCall(client as any, 'fibaro_variable', {})).rejects.toBeInstanceOf(McpError);
+        await expect(handleToolCall(client as any, 'fibaro_quick_app', {})).rejects.toBeInstanceOf(McpError);
+        await expect(handleToolCall(client as any, 'fibaro_home', {})).rejects.toBeInstanceOf(McpError);
+    });
+
     it('getTools returns a tools list containing find_by_name and resolve_by_name', () => {
         const res = getTools();
         expect(res.tools.some((t) => t.name === 'find_by_name')).toBe(true);

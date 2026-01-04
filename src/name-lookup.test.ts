@@ -6,6 +6,16 @@ describe('name-lookup', () => {
     expect(normalizeName('Łazienka')).toBe('lazienka');
   });
 
+  it('makeNameMatcher returns false when nothing matches', () => {
+    const m = makeNameMatcher('kitchen', false);
+    expect(m('garage')).toBe(false);
+  });
+
+  it('makeNameMatcher supports plural-ish substring matching', () => {
+    const m = makeNameMatcher('lamps', false);
+    expect(m('Kitchen Lamp')).toBe(true);
+  });
+
   it('normalizes additional special letters', () => {
     expect(normalizeName('Øresund')).toBe('oresund');
     expect(normalizeName('Đakovo')).toBe('dakovo');
