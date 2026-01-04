@@ -671,7 +671,7 @@ describe('mcp-handlers', () => {
 
     it('handleToolCall resolve_by_name errors on multiple rooms match', async () => {
         const client = makeClient();
-        // Query with 'e' should match both 'Kitchen' and 'Bedroom'
+        // makeClient() provides 'Kitchen' and 'Bedroom' rooms - query with 'e' matches both
         await expect(handleToolCall(client, 'resolve_by_name', { query: 'e', kind: 'rooms' }))
             .rejects.toMatchObject({ code: ErrorCode.InvalidRequest, message: expect.stringContaining('Ambiguous room query') });
     });
