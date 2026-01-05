@@ -229,6 +229,21 @@ describe('mcp-handlers', () => {
         expect(text).not.toContain('Bedroom Lamp');
     });
 
+    it('handleToolCall wraps result as JSON string when format=json (and strips format from forwarded args)', async () => {
+        const client = makeClient();
+        const out = await handleToolCall(client, 'list_devices', { format: 'json' });
+        const text = (out.content[0] as any).text as string;
+        const parsed = JSON.parse(text);
+        expect(parsed).toHaveProperty('content');
+        expect(Array.isArray(parsed.content)).toBe(true);
+    });
+
+    it('handleToolCall supports first_run with non-object args (covers forwardedArgs non-object path)', async () => {
+        const out = await handleToolCall(makeClient(), 'first_run', 'x' as any);
+        const text = (out.content[0] as any).text as string;
+        expect(text).toContain('first_run: configuration helper');
+    });
+
     it('intent routing: fibaro_device supports common ops', async () => {
         const turnOn = vi.fn(async () => { });
         const turnOff = vi.fn(async () => { });
@@ -253,6 +268,8 @@ describe('mcp-handlers', () => {
 
         await handleToolCall(client, 'fibaro_device', { op: 'turn_on', device_id: 1 });
         expect(turnOn).toHaveBeenCalled();
+
+        await handleToolCall(client, 'fibaro_device', { op: 'list' });
 
         await handleToolCall(client, 'fibaro_device', { op: 'turn_off', device_id: 1 });
         expect(turnOff).toHaveBeenCalled();
@@ -606,6 +623,11 @@ describe('mcp-handlers', () => {
         expect((byEnabled.content[0] as any).text).toContain('Bedroom Lamp');
         expect((byEnabled.content[0] as any).text).not.toContain('Kitchen Lamp');
 
+        const byVisible = await handleToolCall(client, 'list_devices', { visible: true });
+        const visibleText = (byVisible.content[0] as any).text as string;
+        expect(visibleText).toContain('Kitchen Lamp');
+        expect(visibleText).toContain('Bedroom Lamp');
+
         const byDead = await handleToolCall(client, 'list_devices', { dead: true });
         expect((byDead.content[0] as any).text).toContain('Bedroom Lamp');
         expect((byDead.content[0] as any).text).not.toContain('Kitchen Lamp');
@@ -618,6 +640,65 @@ describe('mcp-handlers', () => {
     it('handleToolCall resolve_by_name errors on ambiguity for singular query', async () => {
         await expect(handleToolCall(makeClient(), 'resolve_by_name', { query: 'lamp', kind: 'devices' }))
             .rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
+    });
+
+    it('handleToolCall resolve_by_name can force allow_multiple true/false via boolean arg (covers allow_multiple ternary boolean branch)', async () => {
+        const client = makeClient();
+
+        const multi = await handleToolCall(client, 'resolve_by_name', {
+            query: 'lamp',
+            kind: 'devices',
+            allow_multiple: true,
+        });
+        const multiParsed = JSON.parse((multi.content[0] as any).text);
+        expect(multiParsed.allow_multiple).toBe(true);
+        expect(multiParsed.devices.length).toBe(2);
+
+        await expect(
+            handleToolCall(client, 'resolve_by_name', {
+                query: 'lamp',
+                kind: 'devices',
+                allow_multiple: false,
+            })
+        ).rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
+    });
+
+    it('handleToolCall resolve_by_name covers no-match and kind=all ambiguity branches when allow_multiple=false', async () => {
+        const client = makeClient();
+
+        await expect(
+            handleToolCall(client, 'resolve_by_name', { query: 'nope', kind: 'devices', allow_multiple: false })
+        ).rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
+
+        await expect(
+            handleToolCall(client, 'resolve_by_name', { query: 'nope', kind: 'rooms', allow_multiple: false })
+        ).rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
+
+        await expect(
+            handleToolCall(client, 'resolve_by_name', { query: 'nope', kind: 'all', allow_multiple: false })
+        ).rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
+
+        await expect(
+            handleToolCall(client, 'resolve_by_name', { query: 'lamp', kind: 'all', allow_multiple: false })
+        ).rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
+    });
+
+    it('handleToolCall resolve_by_name errors on room ambiguity when allow_multiple=false and kind=rooms', async () => {
+        const client = makeClient({
+            getRooms: async () => [
+                { id: 10, name: 'Kitchen', sectionID: 100, visible: true, isDefault: false },
+                { id: 11, name: 'Kitchen 2', sectionID: 100, visible: true, isDefault: false },
+            ],
+        });
+
+        await expect(
+            handleToolCall(client, 'resolve_by_name', {
+                query: 'kitchen',
+                kind: 'rooms',
+                exact: false,
+                allow_multiple: false,
+            })
+        ).rejects.toMatchObject({ code: ErrorCode.InvalidRequest });
     });
 
     it('handleToolCall resolve_by_name allows multiple for plural query', async () => {
@@ -636,6 +717,25 @@ describe('mcp-handlers', () => {
         const parsed = JSON.parse((out.content[0] as any).text);
         expect(parsed.devices.length).toBe(1);
         expect(parsed.devices[0].name).toBe('Kitchen Lamp');
+    });
+
+    it('handleToolCall list_scenes filters by room_id', async () => {
+        const client = makeClient();
+        const out = await handleToolCall(client, 'list_scenes', { room_id: 10 });
+        const parsed = JSON.parse((out.content[0] as any).text);
+        expect(parsed.length).toBe(1);
+        expect(parsed[0].roomID).toBe(10);
+    });
+
+    it('handleToolCall first_run covers windows path + http default port selection', async () => {
+        const out = await handleToolCall(makeClient(), 'first_run', {
+            os: 'Windows',
+            fibaro_https: false,
+        });
+        const text = (out.content[0] as any).text as string;
+        expect(text).toContain('%USERPROFILE%\\fibaro-mcp.json');
+        expect(text).toContain('"port": 80');
+        expect(text).toContain('"https": false');
     });
 
     it('all tool definitions are callable with minimal schema-derived args', async () => {

@@ -106,6 +106,46 @@ describe('index wiring', () => {
         await server.run();
     });
 
+    it('initializeClient loads valid FIBARO_CONFIG object values (covers parsed object branch)', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        const p = join(tmpdir(), `fibaro-mcp-test-${Date.now()}-ok.json`);
+        writeFileSync(
+            p,
+            JSON.stringify({ host: 'filehost', username: 'fu', password: 'fp', https: false, port: 80 }),
+            'utf8'
+        );
+        process.env.FIBARO_CONFIG = p;
+
+        server.initializeClient();
+        expect(server.fibaroClient).toBeTruthy();
+    });
+
+    it('initializeClient prefers env FIBARO_PORT when set (covers parseInt branch)', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        process.env.FIBARO_HOST = 'example';
+        process.env.FIBARO_USERNAME = 'u';
+        process.env.FIBARO_PASSWORD = 'p';
+        process.env.FIBARO_PORT = '1234';
+        process.env.FIBARO_HTTPS = 'false';
+
+        server.initializeClient();
+        expect(server.fibaroClient).toBeTruthy();
+    });
+
+    it('routes first_run tool calls without requiring a client (covers first_run fast path)', async () => {
+        const { CallToolRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+        const mod = await import('./index.js');
+        new mod.FibaroMCPServer();
+
+        const handler = lastServerInstance.handlers.get(CallToolRequestSchema);
+        const out = await handler({ params: { name: 'first_run', arguments: {} } });
+        expect(out.content[0].text).toContain('first_run');
+    });
+
     it('wraps tool handler errors into McpError via toMcpError', async () => {
         const { CallToolRequestSchema, McpError } = await import('@modelcontextprotocol/sdk/types.js');
 
