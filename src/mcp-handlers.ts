@@ -98,8 +98,75 @@ export type FibaroClientLike = {
 
 export function getTools(): ListToolsResult {
     const toolset = (process.env.FIBARO_TOOLSET || 'intent').toLowerCase();
+
+    const withFormat = (tools: any[]) => {
+        return tools.map((t) => {
+            const inputSchema = t?.inputSchema;
+            if (!inputSchema || inputSchema.type !== 'object') return t;
+            const properties = inputSchema.properties || {};
+            if (properties.format) return t;
+            return {
+                ...t,
+                inputSchema: {
+                    ...inputSchema,
+                    properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
+                        ...properties,
+                    },
+                },
+            };
+        });
+    };
+
     const intentTools: ListToolsResult = {
         tools: [
+            {
+                name: 'first_run',
+                description:
+                    'Setup helper. Use this when configuration is missing. Returns step-by-step instructions plus config templates for common MCP clients.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
+                        client: {
+                            type: 'string',
+                            description:
+                                'Which MCP client you are using (Claude Desktop / Cursor / VS Code extension / Other)',
+                        },
+                        os: {
+                            type: 'string',
+                            description: 'Your OS (macOS / Windows / Linux)',
+                        },
+                        repo_path: {
+                            type: 'string',
+                            description:
+                                'Absolute path to this repo (used to build the node args pointing to dist/index.js)',
+                        },
+                        fibaro_host: {
+                            type: 'string',
+                            description: 'Fibaro Home Center host (IP or hostname)',
+                        },
+                        fibaro_username: {
+                            type: 'string',
+                            description: 'Fibaro username',
+                        },
+                        fibaro_https: {
+                            type: 'boolean',
+                            description: 'Whether Fibaro uses HTTPS (default: true)',
+                        },
+                        fibaro_port: {
+                            type: 'number',
+                            description: 'Port (default: 443 for HTTPS, 80 for HTTP)',
+                        },
+                    },
+                },
+            },
             {
                 name: 'fibaro_device',
                 description:
@@ -107,6 +174,10 @@ export function getTools(): ListToolsResult {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
                         op: {
                             type: 'string',
                             description:
@@ -147,6 +218,10 @@ export function getTools(): ListToolsResult {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
                         op: {
                             type: 'string',
                             description:
@@ -166,6 +241,10 @@ export function getTools(): ListToolsResult {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
                         op: { type: 'string', description: 'Operation: list|get|set|create|delete' },
                         name: { type: 'string', description: 'Variable name' },
                         value: { type: 'string', description: 'Variable value (op=set/create)' },
@@ -181,6 +260,10 @@ export function getTools(): ListToolsResult {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
                         op: { type: 'string', description: 'Operation: list|create|update_code|update_variables|get_lua|delete' },
                         device_id: { type: 'number', description: 'Quick App device ID' },
                         name: { type: 'string', description: 'Quick App name (op=create)' },
@@ -207,6 +290,10 @@ export function getTools(): ListToolsResult {
                 inputSchema: {
                     type: 'object',
                     properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
                         op: {
                             type: 'string',
                             description:
@@ -285,11 +372,55 @@ export function getTools(): ListToolsResult {
     };
 
     if (toolset === 'intent') {
-        return intentTools;
+        return { tools: withFormat(intentTools.tools) };
     }
 
     const legacy: ListToolsResult = {
         tools: [
+            {
+                name: 'first_run',
+                description:
+                    'Setup helper. Use this when configuration is missing. Returns step-by-step instructions plus config templates for common MCP clients.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        format: {
+                            type: 'string',
+                            description: 'Output format: text (default) or json (stringified MCP result)',
+                        },
+                        client: {
+                            type: 'string',
+                            description:
+                                'Which MCP client you are using (Claude Desktop / Cursor / VS Code extension / Other)',
+                        },
+                        os: {
+                            type: 'string',
+                            description: 'Your OS (macOS / Windows / Linux)',
+                        },
+                        repo_path: {
+                            type: 'string',
+                            description:
+                                'Absolute path to this repo (used to build the node args pointing to dist/index.js)',
+                        },
+                        fibaro_host: {
+                            type: 'string',
+                            description: 'Fibaro Home Center host (IP or hostname)',
+                        },
+                        fibaro_username: {
+                            type: 'string',
+                            description: 'Fibaro username',
+                        },
+                        fibaro_https: {
+                            type: 'boolean',
+                            description: 'Whether Fibaro uses HTTPS (default: true)',
+                        },
+                        fibaro_port: {
+                            type: 'number',
+                            description: 'Port (default: 443 for HTTPS, 80 for HTTP)',
+                        },
+                    },
+                },
+            },
             {
                 name: 'list_devices',
                 description: 'List all devices in the Fibaro system',
@@ -1312,10 +1443,16 @@ export function getTools(): ListToolsResult {
                             type: 'boolean',
                             description: 'If true, requires exact normalized match. If false, uses substring match (default: false).',
                         },
+                        allow_multiple: {
+                            type: 'boolean',
+                            description:
+                                'If true, allows multiple matches. If omitted, multiple matches are allowed only when the query appears plural (e.g., ends with "s" or starts with "all").',
+                        },
                         limit: {
                             type: 'number',
                             description: 'Max results per kind (default: 20)',
                         },
+                        format: { type: 'string', enum: ['json', 'text'] },
                     },
                     required: ['query'],
                 },
@@ -1349,6 +1486,7 @@ export function getTools(): ListToolsResult {
                             type: 'number',
                             description: 'Max results per kind (default: 20)',
                         },
+                        format: { type: 'string', enum: ['json', 'text'] },
                     },
                     required: ['query'],
                 },
@@ -1356,11 +1494,69 @@ export function getTools(): ListToolsResult {
         ],
     };
 
-    if (toolset === 'both') {
-        return { tools: [...intentTools.tools, ...legacy.tools] };
+    if (toolset === 'legacy') {
+        return { tools: withFormat(legacy.tools) };
     }
 
-    return legacy;
+    if (toolset === 'both') {
+        return { tools: withFormat([...intentTools.tools, ...legacy.tools]) };
+    }
+
+    return { tools: withFormat(legacy.tools) };
+}
+
+export function handleFirstRun(args: any): CallToolResult {
+    const client = args?.client ? String(args.client) : '<your MCP client>';
+    const os = args?.os ? String(args.os) : '<your OS>';
+    const repoPath = args?.repo_path ? String(args.repo_path) : '<ABSOLUTE_REPO_PATH>';
+    const fibaroHost = args?.fibaro_host ? String(args.fibaro_host) : '<FIBARO_HOST>';
+    const fibaroUsername = args?.fibaro_username ? String(args.fibaro_username) : '<FIBARO_USERNAME>';
+    const fibaroHttps = args?.fibaro_https !== undefined ? Boolean(args.fibaro_https) : true;
+    const fibaroPort =
+        args?.fibaro_port !== undefined
+            ? Number(args.fibaro_port)
+            : fibaroHttps
+                ? 443
+                : 80;
+
+    const suggestedConfigPath = os.toLowerCase().includes('win')
+        ? '%USERPROFILE%\\fibaro-mcp.json'
+        : '$HOME/fibaro-mcp.json';
+
+    const text =
+        `first_run: configuration helper\n\n` +
+        `1) Build the server:\n` +
+        `   - Option A (recommended): no build needed, use npx\n` +
+        `   - Option B (from source): npm install && npm run build\n\n` +
+        `2) Create a local Fibaro config file (do NOT commit it):\n` +
+        `   Path: ${suggestedConfigPath}\n` +
+        `   Contents:\n` +
+        `   {\n` +
+        `     "host": "${fibaroHost}",\n` +
+        `     "username": "${fibaroUsername}",\n` +
+        `     "password": "<FIBARO_PASSWORD>",\n` +
+        `     "port": ${fibaroPort},\n` +
+        `     "https": ${fibaroHttps}\n` +
+        `   }\n\n` +
+        `3) MCP client config for ${client} (recommended via npx):\n` +
+        `   command: npx\n` +
+        `   args: ["-y", "fibaro-mcp"]\n` +
+        `   env: {\n` +
+        `     "FIBARO_CONFIG": "${suggestedConfigPath}",\n` +
+        `     "FIBARO_TOOLSET": "intent"\n` +
+        `   }\n\n` +
+        `4) Alternative (run from a local checkout):\n` +
+        `   command: node\n` +
+        `   args: ["${repoPath}/dist/index.js"]\n` +
+        `   env: { "FIBARO_CONFIG": "${suggestedConfigPath}" }\n\n` +
+        `5) Restart your MCP client and try: "List my Fibaro devices".\n\n` +
+        `Security:\n` +
+        `- Do not paste your password into chat logs.\n` +
+        `- Do not commit fibaro-mcp.json or .env to git.\n`;
+
+    return {
+        content: [{ type: 'text', text }],
+    };
 }
 
 export function getResources(): ListResourcesResult {
@@ -1439,11 +1635,15 @@ export async function handleResourceRead(client: FibaroClientLike, uri: string):
     };
 }
 
-export async function handleToolCall(
+async function handleToolCallInternal(
     client: FibaroClientLike,
     name: string,
     args: any
 ): Promise<CallToolResult> {
+    if (name === 'first_run') {
+        return handleFirstRun(args);
+    }
+
     if (name === 'fibaro_device') {
         const op = (args?.op as string | undefined)?.toLowerCase();
         if (!op) {
@@ -2828,4 +3028,30 @@ export async function handleToolCall(
         default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
+}
+
+export async function handleToolCall(
+    client: FibaroClientLike,
+    name: string,
+    args: any
+): Promise<CallToolResult> {
+    const format = (args?.format as string | undefined)?.toLowerCase();
+    const forwardedArgs = args && typeof args === 'object' ? { ...args } : args;
+    if (forwardedArgs && typeof forwardedArgs === 'object') {
+        delete (forwardedArgs as any).format;
+    }
+
+    const result = await handleToolCallInternal(client, name, forwardedArgs);
+    if (format === 'json') {
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: JSON.stringify(result, null, 2),
+                },
+            ],
+        };
+    }
+
+    return result;
 }

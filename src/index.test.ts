@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // We mock the MCP Server implementation so that importing index.ts does not
 // require a live transport and we can introspect which handlers were registered.
@@ -67,6 +71,7 @@ beforeEach(() => {
     delete process.env.FIBARO_HOST;
     delete process.env.FIBARO_USERNAME;
     delete process.env.FIBARO_PASSWORD;
+    delete process.env.FIBARO_CONFIG;
 });
 
 describe('index wiring', () => {
@@ -101,6 +106,46 @@ describe('index wiring', () => {
         await server.run();
     });
 
+    it('initializeClient loads valid FIBARO_CONFIG object values (covers parsed object branch)', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        const p = join(tmpdir(), `fibaro-mcp-test-${Date.now()}-ok.json`);
+        writeFileSync(
+            p,
+            JSON.stringify({ host: 'filehost', username: 'fu', password: 'fp', https: false, port: 80 }),
+            'utf8'
+        );
+        process.env.FIBARO_CONFIG = p;
+
+        server.initializeClient();
+        expect(server.fibaroClient).toBeTruthy();
+    });
+
+    it('initializeClient prefers env FIBARO_PORT when set (covers parseInt branch)', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        process.env.FIBARO_HOST = 'example';
+        process.env.FIBARO_USERNAME = 'u';
+        process.env.FIBARO_PASSWORD = 'p';
+        process.env.FIBARO_PORT = '1234';
+        process.env.FIBARO_HTTPS = 'false';
+
+        server.initializeClient();
+        expect(server.fibaroClient).toBeTruthy();
+    });
+
+    it('routes first_run tool calls without requiring a client (covers first_run fast path)', async () => {
+        const { CallToolRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+        const mod = await import('./index.js');
+        new mod.FibaroMCPServer();
+
+        const handler = lastServerInstance.handlers.get(CallToolRequestSchema);
+        const out = await handler({ params: { name: 'first_run', arguments: {} } });
+        expect(out.content[0].text).toContain('first_run');
+    });
+
     it('wraps tool handler errors into McpError via toMcpError', async () => {
         const { CallToolRequestSchema, McpError } = await import('@modelcontextprotocol/sdk/types.js');
 
@@ -128,7 +173,98 @@ describe('index wiring', () => {
         const mod = await import('./index.js');
         const server = new mod.FibaroMCPServer();
 
-        await expect(server.run()).rejects.toBeInstanceOf(Error);
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        await expect(server.run()).resolves.toBeUndefined();
+
+        // Even though the server starts, Fibaro-dependent handlers should still error.
+        const { ReadResourceRequestSchema, McpError } = await import('@modelcontextprotocol/sdk/types.js');
+        const handler = lastServerInstance.handlers.get(ReadResourceRequestSchema);
+        await expect(handler({ params: { uri: 'fibaro://devices' } })).rejects.toBeInstanceOf(McpError);
+        spy.mockRestore();
+    });
+
+    it('initializeClient throws when FIBARO_CONFIG points to invalid JSON', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        const p = join(tmpdir(), `fibaro-mcp-test-${Date.now()}.json`);
+        writeFileSync(p, '{not json', 'utf8');
+        process.env.FIBARO_CONFIG = p;
+
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        expect(() => server.initializeClient()).toThrow('Failed to read FIBARO_CONFIG file');
+        spy.mockRestore();
+    });
+
+    it('initializeClient throws when FIBARO_CONFIG points to missing file', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        process.env.FIBARO_CONFIG = join(tmpdir(), `fibaro-mcp-does-not-exist-${Date.now()}.json`);
+
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        expect(() => server.initializeClient()).toThrow('Failed to read FIBARO_CONFIG file');
+        spy.mockRestore();
+    });
+
+    it('initializeClient handles FIBARO_CONFIG with non-object JSON', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        const p = join(tmpdir(), `fibaro-mcp-test-array-${Date.now()}.json`);
+        writeFileSync(p, 'null', 'utf8');
+        process.env.FIBARO_CONFIG = p;
+        process.env.FIBARO_HOST = 'test';
+        process.env.FIBARO_USERNAME = 'u';
+        process.env.FIBARO_PASSWORD = 'p';
+
+        expect(() => server.initializeClient()).not.toThrow();
+    });
+
+    it('initializeClient uses valid object from FIBARO_CONFIG', async () => {
+        const mod = await import('./index.js');
+        const server = new mod.FibaroMCPServer() as any;
+
+        const p = join(tmpdir(), `fibaro-mcp-test-obj-${Date.now()}.json`);
+        writeFileSync(p, JSON.stringify({ host: 'config-host', username: 'config-user', password: 'config-pass' }), 'utf8');
+        process.env.FIBARO_CONFIG = p;
+        delete process.env.FIBARO_HOST;
+        delete process.env.FIBARO_USERNAME;
+        delete process.env.FIBARO_PASSWORD;
+
+        server.initializeClient();
+        expect(server.fibaroClient).toBeDefined();
+    });
+
+    it('handleToolCall allows first_run tool without client', async () => {
+        const { CallToolRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+        const mod = await import('./index.js');
+        new mod.FibaroMCPServer();
+
+        const handler = lastServerInstance.handlers.get(CallToolRequestSchema);
+        const result = await handler({ params: { name: 'first_run', arguments: {} } });
+        expect(result).toBeDefined();
+        expect(result.content).toBeDefined();
+    });
+
+    it('main guard runs when argv[1] matches module path', async () => {
+        // Trigger the main guard by setting argv[1] to this module path.
+        // This should construct a server and call run().
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+        // Under Vitest/Vite, importing './index.js' actually evaluates src/index.ts,
+        // so isMain compares against the index.ts path.
+        const indexTsPath = fileURLToPath(new URL('./index.ts', import.meta.url));
+        process.argv[1] = indexTsPath;
+
+        vi.resetModules();
+        await import('./index.js');
+
+        // Give the async run() a tick to execute.
+        await new Promise((r) => setTimeout(r, 0));
+        expect(lastServerInstance).toBeTruthy();
+        expect(spy).toHaveBeenCalled();
+        spy.mockRestore();
     });
 
     it('server.onerror logs MCP errors', async () => {

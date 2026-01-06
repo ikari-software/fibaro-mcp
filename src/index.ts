@@ -21,6 +21,8 @@ import { FibaroClient, FibaroConfig } from './fibaro-client.js';
 import { getResources, getTools, handleResourceRead, handleToolCall } from './mcp-handlers.js';
 import { toMcpError } from './errors.js';
 import { z } from 'zod';
+import dotenv from 'dotenv';
+import { readFileSync } from 'node:fs';
 
 // Configuration schema
 const ConfigSchema = z.object({
@@ -57,19 +59,44 @@ class FibaroMCPServer {
     if (!this.fibaroClient) {
       throw new McpError(
         ErrorCode.InvalidRequest,
-        'Fibaro client not initialized. Please set FIBARO_HOST, FIBARO_USERNAME, and FIBARO_PASSWORD environment variables.'
+        'Fibaro client not initialized. Configure via .env, FIBARO_CONFIG, or set FIBARO_HOST, FIBARO_USERNAME, and FIBARO_PASSWORD environment variables.'
       );
     }
     return this.fibaroClient;
   }
 
   private initializeClient() {
+    dotenv.config();
+
+    let fileConfig: Partial<FibaroConfig> = {};
+    const configPath = process.env.FIBARO_CONFIG;
+    if (configPath) {
+      try {
+        const raw = readFileSync(configPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          fileConfig = parsed as Partial<FibaroConfig>;
+        }
+      } catch (error) {
+        console.error('Failed to read FIBARO_CONFIG file:', error);
+        throw new Error('Failed to read FIBARO_CONFIG file');
+      }
+    }
+
     const config: FibaroConfig = {
-      host: process.env.FIBARO_HOST || '',
-      username: process.env.FIBARO_USERNAME || '',
-      password: process.env.FIBARO_PASSWORD || '',
-      port: process.env.FIBARO_PORT ? parseInt(process.env.FIBARO_PORT) : undefined,
-      https: process.env.FIBARO_HTTPS !== 'false',
+      host: process.env.FIBARO_HOST || fileConfig.host || '',
+      username: process.env.FIBARO_USERNAME || fileConfig.username || '',
+      password: process.env.FIBARO_PASSWORD || fileConfig.password || '',
+      port:
+        process.env.FIBARO_PORT
+          ? parseInt(process.env.FIBARO_PORT)
+          : fileConfig.port !== undefined
+            ? Number(fileConfig.port)
+            : undefined,
+      https:
+        process.env.FIBARO_HTTPS !== undefined
+          ? process.env.FIBARO_HTTPS !== 'false'
+          : fileConfig.https,
     };
 
     try {
@@ -78,7 +105,7 @@ class FibaroMCPServer {
     } catch (error) {
       console.error('Failed to initialize Fibaro client:', error);
       throw new Error(
-        'Missing required environment variables: FIBARO_HOST, FIBARO_USERNAME, FIBARO_PASSWORD'
+        'Missing required configuration: provide host/username/password via .env, FIBARO_CONFIG, or environment variables (FIBARO_HOST, FIBARO_USERNAME, FIBARO_PASSWORD)'
       );
     }
   }
@@ -115,10 +142,14 @@ class FibaroMCPServer {
 
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const client = this.getClient();
       const { name, arguments: args } = request.params;
 
       try {
+        if (name === 'first_run') {
+          return await handleToolCall({} as any, name, args);
+        }
+
+        const client = this.getClient();
         return await handleToolCall(client as any, name, args);
       } catch (error) {
         throw toMcpError(error, { operation: 'tool', name });
@@ -127,7 +158,13 @@ class FibaroMCPServer {
   }
 
   async run() {
-    this.initializeClient();
+    try {
+      this.initializeClient();
+    } catch (error) {
+      console.error(
+        'Fibaro MCP Server started without Fibaro configuration. Call the first_run tool to generate setup instructions.'
+      );
+    }
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Fibaro MCP Server running on stdio');

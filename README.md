@@ -1,30 +1,8 @@
 # Fibaro MCP Server
 
-**Version 2.0.0** - The Complete Fibaro Home Automation Management Solution
+Fibaro Home Center integration for the Model Context Protocol (MCP).
 
-A comprehensive Model Context Protocol (MCP) server that provides **full management** of literally everything your Fibaro Home Center offers! Control devices, create scenes, manage users, configure Z-Wave networks, and much more - all through natural language with AI assistants like Claude.
-
-## 🎉 Version 2.0 - Revolutionary Release!
-
-- **70+ Tools** (up from 27!)
-- **~95% API Coverage** - Manage virtually everything
-- **Full CRUD Operations** - Complete lifecycle management
-- **15 Management Categories** - From devices to Z-Wave networks
-
-## ✨ What's New in 2.0
-
-- 🏘️ **Room & Section Management** - Full CRUD operations
-- 👥 **User Management** - Complete user lifecycle
-- 🚨 **Alarm Control** - Arm/disarm security systems
-- 🔌 **Z-Wave Management** - Network healing, inclusion/exclusion
-- 💾 **Backup & Restore** - System-level disaster recovery
-- 📍 **Geofencing** - Location-based automation
-- 🔌 **Plugin Management** - Install/manage plugins
-- 🌍 **Profile Modes** - Home, Away, Vacation modes
-- 🌡️ **Climate Zones** - Heating management
-- ⚙️ **System Administration** - Settings, restart, logs
-
-See [FEATURES.md](FEATURES.md) for the complete feature list!
+Use it with MCP-capable clients (Claude Desktop, Cursor, VS Code extensions, etc.) to control devices, run scenes, manage variables, and administer your Fibaro system.
 
 ## Features
 
@@ -56,6 +34,19 @@ See [FEATURES.md](FEATURES.md) for the complete feature list!
 
 ## Installation
 
+### Recommended (published package)
+
+Most users should not need to clone this repo. Configure your MCP client to run the server via `npx`:
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "fibaro-mcp"]
+}
+```
+
+### From source (development)
+
 ```bash
 npm install
 npm run build
@@ -63,13 +54,21 @@ npm run build
 
 ## Configuration
 
-The server requires the following environment variables to connect to your Fibaro Home Center:
+You can configure the server in three ways (in priority order):
+
+1. `FIBARO_HOST`/`FIBARO_USERNAME`/`FIBARO_PASSWORD` env vars (explicit)
+2. `FIBARO_CONFIG=/absolute/path/to/fibaro.json` (single config file)
+3. `.env` file (loaded automatically when the server starts)
 
 - `FIBARO_HOST`: The hostname or IP address of your Fibaro Home Center (required)
 - `FIBARO_USERNAME`: Your Fibaro username (required)
 - `FIBARO_PASSWORD`: Your Fibaro password (required)
 - `FIBARO_PORT`: The port number (optional, defaults to 443 for HTTPS, 80 for HTTP)
 - `FIBARO_HTTPS`: Whether to use HTTPS (optional, defaults to true)
+
+Tool listing mode:
+
+- `FIBARO_TOOLSET`: `intent` (default), `legacy`, or `both`
 
 ### Example Configuration
 
@@ -81,7 +80,66 @@ export FIBARO_PORT="443"
 export FIBARO_HTTPS="true"
 ```
 
-## Usage with Claude Desktop
+### Example `FIBARO_CONFIG`
+
+Create a JSON file anywhere on disk (do not commit it), e.g. `~/fibaro-mcp.json`:
+
+```json
+{
+  "host": "192.168.1.100",
+  "username": "admin",
+  "password": "your-password",
+  "port": 443,
+  "https": true
+}
+```
+
+Then set:
+
+```bash
+export FIBARO_CONFIG="$HOME/fibaro-mcp.json"
+```
+
+### Example `.env`
+
+Create `.env` next to where you run the server:
+
+```bash
+FIBARO_HOST=192.168.1.100
+FIBARO_USERNAME=admin
+FIBARO_PASSWORD=your-password
+FIBARO_PORT=443
+FIBARO_HTTPS=true
+```
+
+## Setup (common MCP clients)
+
+The server communicates over stdio. Most clients need:
+
+- **Command**: `npx` (recommended) or `node` (local checkout)
+- **Args**: `[-y, fibaro-mcp]` (recommended) or `[/absolute/path/to/repo/dist/index.js]`
+- **Env**: either `FIBARO_CONFIG` or `FIBARO_HOST`/`FIBARO_USERNAME`/`FIBARO_PASSWORD`
+
+### Agent-assisted setup (recommended)
+
+If configuration is missing, instruct the agent to call the `first_run` tool.
+
+The server will start even without Fibaro credentials so the agent can do this.
+
+Example:
+
+- Call: `first_run`
+- Optionally provide: `client`, `os`, `repo_path`, `fibaro_host`, `fibaro_username`, `fibaro_https`, `fibaro_port`
+
+The tool returns:
+
+- commands to build (`npm install`, `npm run build`)
+- a template `fibaro-mcp.json` for `FIBARO_CONFIG`
+- a ready-to-paste MCP client configuration snippet
+
+Security: don’t paste passwords into chat logs; don’t commit `fibaro-mcp.json` or `.env`.
+
+### Claude Desktop
 
 Add this configuration to your Claude Desktop config file:
 
@@ -95,21 +153,50 @@ Add this configuration to your Claude Desktop config file:
 {
   "mcpServers": {
     "fibaro": {
-      "command": "node",
-      "args": ["/absolute/path/to/fibaro-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "fibaro-mcp"],
       "env": {
-        "FIBARO_HOST": "192.168.1.100",
-        "FIBARO_USERNAME": "admin",
-        "FIBARO_PASSWORD": "your-password",
-        "FIBARO_PORT": "443",
-        "FIBARO_HTTPS": "true"
+        "FIBARO_CONFIG": "/absolute/path/to/fibaro-mcp.json",
+        "FIBARO_TOOLSET": "intent"
       }
     }
   }
 }
 ```
 
+### Cursor
+
+Add the MCP server entry in Cursor’s MCP settings (JSON). Use the same structure as Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "fibaro": {
+      "command": "npx",
+      "args": ["-y", "fibaro-mcp"],
+      "env": {
+        "FIBARO_CONFIG": "/absolute/path/to/fibaro-mcp.json"
+      }
+    }
+  }
+}
+```
+
+### VS Code (MCP-capable extensions)
+
+Most MCP extensions use the same `command`/`args`/`env` shape. Prefer `FIBARO_CONFIG` so you don’t copy credentials into multiple places.
+
 ## Available Tools
+
+By default, you’ll see a small “intent” toolset:
+
+- `fibaro_device`
+- `fibaro_scene`
+- `fibaro_variable`
+- `fibaro_quick_app`
+- `fibaro_home`
+
+You can also expose legacy tools with `FIBARO_TOOLSET=legacy` or `FIBARO_TOOLSET=both`.
 
 ### Device Management
 
@@ -283,25 +370,35 @@ npm run dev
 npm start
 ```
 
-## API Coverage
+## Documentation
 
-This MCP server implements comprehensive Fibaro Home Center API support:
+- [QUICKSTART.md](QUICKSTART.md)
+- [EXAMPLES.md](EXAMPLES.md)
+- [FEATURES.md](FEATURES.md)
+- [LUA_MANAGEMENT.md](LUA_MANAGEMENT.md)
 
-- ✅ Device listing and control
-- ✅ Scene execution and management
-- ✅ Room and section organization
-- ✅ Global variables
-- ✅ System information
-- ✅ Weather data
-- ✅ Energy monitoring
-- ✅ RGB/RGBW light control
-- ✅ Thermostat control
-- ✅ Binary switches
-- ✅ Dimmers
-- ✅ **Full Lua script management** (create, read, update, delete)
-- ✅ **Scene creation and editing with Lua code**
-- ✅ **Quick App creation, modification, and management**
-- ✅ Quick App variables management
+## Development
+
+### Use local code with npx-style config
+
+If you want your MCP client config to look like the published `npx fibaro-mcp` setup but run your local working copy instead:
+
+```bash
+npm install
+npm run build
+npm link
+```
+
+Then set your MCP client to run:
+
+- **Command**: `fibaro-mcp`
+- **Args**: `[]`
+
+To undo:
+
+```bash
+npm unlink
+```
 
 ## Security Notes
 

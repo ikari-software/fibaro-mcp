@@ -18,6 +18,48 @@ describe('FibaroClient caching', () => {
     process.env.FIBARO_CACHE_TTL_MS = '10000';
   });
 
+  it('climate + system + panels endpoints', async () => {
+    const scope = nock('http://fibaro.test:80')
+      .get('/api/panels/heating')
+      .once()
+      .reply(200, [{ id: 1 }])
+      .post('/api/panels/heating/1', { mode: 'auto' })
+      .once()
+      .reply(200, {})
+      .get('/api/settings/info')
+      .once()
+      .reply(200, { serial: 'x' })
+      .get('/api/panels/weather')
+      .once()
+      .reply(200, { temp: 10 })
+      .get('/api/panels/energy')
+      .once()
+      .reply(200, { total: 1 });
+
+    const client = makeClient();
+    expect(await client.getClimateZones()).toEqual([{ id: 1 }]);
+    await client.setClimateMode(1, 'auto');
+    expect(await client.getSystemInfo()).toEqual({ serial: 'x' });
+    expect(await client.getWeather()).toEqual({ temp: 10 });
+    expect(await client.getEnergyPanel()).toEqual({ total: 1 });
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('user fetch endpoints', async () => {
+    const scope = nock('http://fibaro.test:80')
+      .get('/api/users')
+      .once()
+      .reply(200, [{ id: 1 }])
+      .get('/api/users/1')
+      .once()
+      .reply(200, { id: 1, name: 'u' });
+
+    const client = makeClient();
+    expect(await client.getUsers()).toEqual([{ id: 1 }]);
+    expect(await client.getUser(1)).toEqual({ id: 1, name: 'u' });
+    expect(scope.isDone()).toBe(true);
+  });
+
   it('caches getDevices within TTL', async () => {
     const scope = nock('http://fibaro.test:80')
       .get('/api/devices')
@@ -742,6 +784,29 @@ describe('FibaroClient API methods', () => {
     expect(await client.getDevices()).toEqual(devices1);
     await client.deleteDevice(1);
     expect(await client.getDevices()).toEqual(devices2);
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('light control methods - turnOn, turnOff, setBrightness, setColor', async () => {
+    const scope = nock('http://fibaro.test:80')
+      .post('/api/devices/1/action/turnOn', { args: [] })
+      .once()
+      .reply(200, {})
+      .post('/api/devices/1/action/turnOff', { args: [] })
+      .once()
+      .reply(200, {})
+      .post('/api/devices/1/action/setValue', { args: [50] })
+      .once()
+      .reply(200, {})
+      .post('/api/devices/1/action/setColor', { args: [255, 128, 64, 32] })
+      .once()
+      .reply(200, {});
+
+    const client = makeClient();
+    await client.turnOn(1);
+    await client.turnOff(1);
+    await client.setBrightness(1, 50);
+    await client.setColor(1, 255, 128, 64, 32);
     expect(scope.isDone()).toBe(true);
   });
 
