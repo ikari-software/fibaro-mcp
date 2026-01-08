@@ -3,6 +3,8 @@
 /**
  * Fibaro MCP Server - Model Context Protocol Server for Fibaro Home Center
  *
+ * @see https://github.com/ikari-software/fibaro-mcp
+ *
  * Copyright (c) 2025 Cezar "ikari" Pokorski
  * Licensed under the MIT License
  */
