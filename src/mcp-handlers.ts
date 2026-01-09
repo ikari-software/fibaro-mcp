@@ -1417,14 +1417,30 @@ export function getTools(): ListToolsResult {
       },
       {
         name: "get_device_stats",
-        description: "Get device statistics",
+        description:
+          "Get device energy/power statistics with intelligent aggregation. Automatically handles large datasets by aggregating data based on time span. Returns aggregated metrics (power, energy, voltage, current) with min/max/avg values per time bucket.",
         inputSchema: {
           type: "object",
           properties: {
-            device_id: { type: "number" },
-            from: { type: "number" },
-            to: { type: "number" },
-            property: { type: "string" },
+            device_id: { type: "number", description: "Device ID to get stats for" },
+            from: { type: "number", description: "Start timestamp (Unix seconds)" },
+            to: { type: "number", description: "End timestamp (Unix seconds)" },
+            property: { type: "string", description: "Legacy: specific property to fetch" },
+            aggregation: {
+              type: "string",
+              enum: ["raw", "1min", "5min", "15min", "1hour", "6hour", "auto"],
+              description:
+                "Aggregation interval. 'auto' (default) selects based on time span: <=1h: raw, <=6h: 5min, <=24h: 15min, <=7d: 1hour, >7d: 6hour",
+            },
+            max_points: {
+              type: "number",
+              description: "Maximum data points to return (default: 1000). Data will be downsampled if exceeded.",
+            },
+            metrics: {
+              type: "array",
+              items: { type: "string", enum: ["power", "energy", "voltage", "current"] },
+              description: "Metrics to include (default: all available). Power/voltage/current use averages, energy uses sum/delta.",
+            },
           },
           required: ["device_id"],
         },
@@ -1522,6 +1538,216 @@ export function getTools(): ListToolsResult {
             format: { type: "string", enum: ["json", "text"] },
           },
           required: ["query"],
+        },
+      },
+      {
+        name: "fibaro_template",
+        description:
+          "Scene template management: list available templates, get template details, instantiate templates with parameters, add custom templates, or delete templates",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: list|get|instantiate|create|delete",
+              enum: ["list", "get", "instantiate", "create", "delete"],
+            },
+            category: {
+              type: "string",
+              description: "Filter templates by category (for op=list)",
+              enum: ["lighting", "security", "energy", "climate", "custom"],
+            },
+            template_id: {
+              type: "string",
+              description: "Template ID (required for op=get|instantiate|delete)",
+            },
+            scene_name: {
+              type: "string",
+              description: "Name for the new scene (required for op=instantiate)",
+            },
+            room_id: {
+              type: "number",
+              description: "Room ID for the new scene (required for op=instantiate)",
+            },
+            parameters: {
+              type: "object",
+              description:
+                "Template parameters as key-value pairs (required for op=instantiate). Parameter types: device_id (number), number, string, time (HH:MM format), boolean",
+            },
+            template: {
+              type: "object",
+              description: "Custom template definition (required for op=create)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_history",
+        description:
+          "Device state history: query historical device states, calculate statistics, aggregate data by time intervals, and export history",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: query|stats|aggregate|export",
+              enum: ["query", "stats", "aggregate", "export"],
+            },
+            device_id: {
+              type: "number",
+              description: "Device ID (required for all ops)",
+            },
+            from: {
+              type: "number",
+              description: "Start timestamp in milliseconds (Unix epoch)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp in milliseconds (Unix epoch)",
+            },
+            property: {
+              type: "string",
+              description: "Device property to query (e.g., 'value', 'power', 'temperature')",
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of entries to return (default: 1000)",
+            },
+            interval: {
+              type: "string",
+              description: "Time interval for aggregation (for op=aggregate)",
+              enum: ["5m", "15m", "1h", "6h", "1d", "1w"],
+            },
+            aggregation: {
+              type: "string",
+              description: "Aggregation function (for op=aggregate)",
+              enum: ["last", "avg", "min", "max", "sum", "count"],
+            },
+          },
+          required: ["op", "device_id"],
+        },
+      },
+      {
+        name: "fibaro_scene_history",
+        description:
+          "Scene execution history: track scene runs, analyze performance, calculate success rates and execution durations",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: query|stats|performance",
+              enum: ["query", "stats", "performance"],
+            },
+            scene_id: {
+              type: "number",
+              description: "Scene ID (optional - if not provided, returns all scenes)",
+            },
+            from: {
+              type: "number",
+              description: "Start timestamp in milliseconds (Unix epoch)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp in milliseconds (Unix epoch)",
+            },
+            status: {
+              type: "string",
+              description: "Filter by execution status",
+              enum: ["success", "failure", "timeout"],
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of entries to return (default: 1000)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_backup",
+        description:
+          "Comprehensive backup and restore: export Fibaro system configuration to JSON/YAML, validate imports, restore configurations",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: export|import|validate",
+              enum: ["export", "import", "validate"],
+            },
+            export_format: {
+              type: "string",
+              description: "Export/Import file format (default: json)",
+              enum: ["json", "yaml"],
+            },
+            include: {
+              type: "array",
+              description: "Data types to include in export",
+              items: {
+                type: "string",
+                enum: ["devices", "scenes", "rooms", "sections", "variables", "users"],
+              },
+            },
+            exclude: {
+              type: "array",
+              description: "Data types to exclude from export",
+              items: {
+                type: "string",
+                enum: ["devices", "scenes", "rooms", "sections", "variables", "users"],
+              },
+            },
+            include_users: {
+              type: "boolean",
+              description: "Include users in export (default: false for security)",
+            },
+            include_passwords: {
+              type: "boolean",
+              description: "Include passwords in user export (default: false)",
+            },
+            import_data: {
+              type: "string",
+              description: "JSON/YAML string of exported data for import/validate operations",
+            },
+            dry_run: {
+              type: "boolean",
+              description: "Validate import without making changes (default: false)",
+            },
+            skip_existing: {
+              type: "boolean",
+              description: "Skip items that already exist (default: false)",
+            },
+            update_existing: {
+              type: "boolean",
+              description: "Update existing items during import (default: false)",
+            },
+            import_types: {
+              type: "array",
+              description: "Data types to import (default: all)",
+              items: {
+                type: "string",
+                enum: ["devices", "scenes", "rooms", "sections", "variables", "users"],
+              },
+            },
+          },
+          required: ["op"],
         },
       },
     ],
@@ -2012,6 +2238,803 @@ async function handleToolCallInternal(
             {
               type: "text",
               text: `fibaro_home: unsupported op "${op}". Supported ops include: system_info|weather|energy_panel|rooms|sections|...|device_stats`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_template") {
+    const { getTemplateManager } = await import("./templates/template-manager.js");
+    const templateManager = getTemplateManager();
+
+    const op = (args?.op as string | undefined)?.toLowerCase();
+    if (!op) {
+      throw new McpError(ErrorCode.InvalidParams, 'fibaro_template: missing required parameter "op"');
+    }
+
+    switch (op) {
+      case "list": {
+        const category = args?.category as string | undefined;
+        const templates = category
+          ? templateManager.getByCategory(category as any)
+          : templateManager.getAll();
+
+        const library = templateManager.getLibrary();
+
+        let text = `Found ${templates.length} template(s)`;
+        if (category) {
+          text += ` in category: ${category}`;
+        }
+        text += `\n\nTotal templates by category:`;
+        for (const [cat, count] of Object.entries(library.categories)) {
+          text += `\n  ${cat}: ${count}`;
+        }
+
+        text += `\n\nTemplates:\n`;
+        for (const template of templates) {
+          text += `\n- ${template.id} (${template.name})`;
+          text += `\n  Category: ${template.category}`;
+          text += `\n  Description: ${template.description}`;
+          text += `\n  Parameters: ${template.parameters.length}`;
+          if (template.tags && template.tags.length > 0) {
+            text += `\n  Tags: ${template.tags.join(", ")}`;
+          }
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "get": {
+        const templateId = args?.template_id as string | undefined;
+        if (!templateId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=get: missing required parameter "template_id"',
+          );
+        }
+
+        const template = templateManager.getById(templateId);
+        if (!template) {
+          return {
+            content: [{ type: "text", text: `Template '${templateId}' not found` }],
+          };
+        }
+
+        let text = `Template: ${template.name} (${template.id})\n`;
+        text += `Category: ${template.category}\n`;
+        text += `Version: ${template.version}\n`;
+        text += `Description: ${template.description}\n`;
+        if (template.author) {
+          text += `Author: ${template.author}\n`;
+        }
+        if (template.tags && template.tags.length > 0) {
+          text += `Tags: ${template.tags.join(", ")}\n`;
+        }
+
+        text += `\nParameters:\n`;
+        for (const param of template.parameters) {
+          text += `\n- ${param.name} (${param.type})${param.required ? " [REQUIRED]" : ""}`;
+          text += `\n  ${param.description}`;
+          if (param.default !== undefined) {
+            text += `\n  Default: ${JSON.stringify(param.default)}`;
+          }
+          if (param.validation) {
+            if (param.validation.min !== undefined) text += `\n  Min: ${param.validation.min}`;
+            if (param.validation.max !== undefined) text += `\n  Max: ${param.validation.max}`;
+            if (param.validation.pattern) text += `\n  Pattern: ${param.validation.pattern}`;
+          }
+        }
+
+        text += `\n\nLua Template:\n${template.lua_template}`;
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "instantiate": {
+        const templateId = args?.template_id as string | undefined;
+        const sceneName = args?.scene_name as string | undefined;
+        const roomId = args?.room_id as number | undefined;
+        const parameters = args?.parameters as Record<string, any> | undefined;
+
+        if (!templateId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "template_id"',
+          );
+        }
+        if (!sceneName) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "scene_name"',
+          );
+        }
+        if (!roomId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "room_id"',
+          );
+        }
+        if (!parameters) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "parameters"',
+          );
+        }
+
+        const result = templateManager.instantiate({
+          template_id: templateId,
+          scene_name: sceneName,
+          room_id: roomId,
+          parameters,
+        });
+
+        if (!result.validation.valid) {
+          let text = `Template parameter validation failed:\n`;
+          for (const error of result.validation.errors) {
+            text += `\n- ${error.parameter}: ${error.message}`;
+          }
+          return {
+            content: [{ type: "text", text }],
+          };
+        }
+
+        // Create the scene using the generated Lua code
+        try {
+          const scene = await client.createScene({
+            name: sceneName,
+            roomID: roomId,
+            lua: result.lua,
+            type: "lua",
+            isLua: true,
+          });
+
+          let text = `Successfully created scene from template!\n`;
+          text += `Scene ID: ${scene.id}\n`;
+          text += `Scene Name: ${scene.name}\n`;
+          text += `Room ID: ${scene.roomID}\n`;
+          text += `\nGenerated Lua code (${result.lua.length} characters):\n${result.lua}`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error: any) {
+          throw new McpError(
+            ErrorCode.InternalError,
+            `Failed to create scene: ${error.message}`,
+          );
+        }
+      }
+
+      case "create": {
+        const template = args?.template as any;
+        if (!template) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=create: missing required parameter "template"',
+          );
+        }
+
+        const result = templateManager.addTemplate(template);
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `Failed to add template: ${result.error}` }],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully added custom template: ${template.id} (${template.name})`,
+            },
+          ],
+        };
+      }
+
+      case "delete": {
+        const templateId = args?.template_id as string | undefined;
+        if (!templateId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=delete: missing required parameter "template_id"',
+          );
+        }
+
+        const result = templateManager.removeTemplate(templateId);
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `Failed to remove template: ${result.error}` }],
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: `Successfully removed template: ${templateId}` }],
+        };
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_template: unsupported op "${op}". Supported ops: list|get|instantiate|create|delete`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_history") {
+    const { getHistoryManager } = await import("./history/history-manager.js");
+    const historyManager = getHistoryManager();
+
+    const op = (args?.op as string | undefined)?.toLowerCase();
+    if (!op) {
+      throw new McpError(ErrorCode.InvalidParams, 'fibaro_history: missing required parameter "op"');
+    }
+
+    const deviceId = args?.device_id as number | undefined;
+    if (!deviceId) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'fibaro_history: missing required parameter "device_id"',
+      );
+    }
+
+    const from = args?.from as number | undefined;
+    const to = args?.to as number | undefined;
+    const property = args?.property as string | undefined;
+    const limit = args?.limit as number | undefined;
+
+    switch (op) {
+      case "query": {
+        const entries = await historyManager.queryDeviceHistory(client, {
+          deviceId,
+          from,
+          to,
+          property,
+          limit,
+        });
+
+        let text = `Device History for Device ${deviceId}\n`;
+        if (property) {
+          text += `Property: ${property}\n`;
+        }
+        text += `Found ${entries.length} entries\n`;
+
+        if (from || to) {
+          text += `Time range: ${from ? new Date(from).toISOString() : "beginning"} to ${to ? new Date(to).toISOString() : "now"}\n`;
+        }
+
+        text += `\nHistory Entries:\n`;
+        for (const entry of entries.slice(0, 50)) {
+          text += `\n- ${new Date(entry.timestamp).toISOString()}`;
+          text += ` | ${entry.property}: ${JSON.stringify(entry.value)}`;
+          if (entry.oldValue !== undefined) {
+            text += ` (was: ${JSON.stringify(entry.oldValue)})`;
+          }
+        }
+
+        if (entries.length > 50) {
+          text += `\n\n... and ${entries.length - 50} more entries`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "stats": {
+        const entries = await historyManager.queryDeviceHistory(client, {
+          deviceId,
+          from,
+          to,
+          property,
+          limit,
+        });
+
+        const stats = historyManager.calculateStats(
+          entries,
+          deviceId,
+          property || "value",
+          from || 0,
+          to || Date.now(),
+        );
+
+        let text = `Device History Statistics for Device ${deviceId}\n`;
+        if (stats.deviceName) {
+          text += `Device Name: ${stats.deviceName}\n`;
+        }
+        text += `Property: ${stats.property}\n`;
+        text += `Time range: ${new Date(stats.from).toISOString()} to ${new Date(stats.to).toISOString()}\n`;
+        text += `\nStatistics:\n`;
+        text += `  Total entries: ${stats.count}\n`;
+        text += `  Value changes: ${stats.changes}\n`;
+        text += `  First value: ${JSON.stringify(stats.first)}\n`;
+        text += `  Last value: ${JSON.stringify(stats.last)}\n`;
+
+        if (stats.min !== undefined) {
+          text += `  Minimum: ${stats.min}\n`;
+          text += `  Maximum: ${stats.max}\n`;
+          text += `  Average: ${stats.avg?.toFixed(2)}\n`;
+          text += `  Sum: ${stats.sum}\n`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "aggregate": {
+        const interval = args?.interval as any;
+        const aggregation = args?.aggregation as any;
+
+        if (!interval) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_history op=aggregate: missing required parameter "interval"',
+          );
+        }
+        if (!aggregation) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_history op=aggregate: missing required parameter "aggregation"',
+          );
+        }
+
+        const entries = await historyManager.queryDeviceHistory(client, {
+          deviceId,
+          from,
+          to,
+          property,
+          limit,
+        });
+
+        const aggregated = historyManager.aggregateByInterval(entries, interval, aggregation);
+
+        let text = `Aggregated Device History for Device ${deviceId}\n`;
+        text += `Interval: ${interval}, Aggregation: ${aggregation}\n`;
+        text += `Found ${aggregated.length} aggregated entries\n\n`;
+
+        for (const entry of aggregated.slice(0, 100)) {
+          text += `\n- ${new Date(entry.timestamp).toISOString()}`;
+          text += ` | ${entry.property}: ${entry.value.toFixed(2)}`;
+          text += ` (${entry.count} samples)`;
+          if (entry.min !== undefined) {
+            text += ` [min: ${entry.min.toFixed(2)}, max: ${entry.max?.toFixed(2)}, avg: ${entry.avg?.toFixed(2)}]`;
+          }
+        }
+
+        if (aggregated.length > 100) {
+          text += `\n\n... and ${aggregated.length - 100} more entries`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "export": {
+        const exportData = await historyManager.exportHistory(
+          client,
+          {
+            deviceId,
+            from,
+            to,
+            property,
+            limit,
+          },
+          true,
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(exportData, null, 2),
+            },
+          ],
+        };
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_history: unsupported op "${op}". Supported ops: query|stats|aggregate|export`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_scene_history") {
+    const { getHistoryManager } = await import("./history/history-manager.js");
+    const historyManager = getHistoryManager();
+
+    const op = (args?.op as string | undefined)?.toLowerCase();
+    if (!op) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'fibaro_scene_history: missing required parameter "op"',
+      );
+    }
+
+    const sceneId = args?.scene_id as number | undefined;
+    const from = args?.from as number | undefined;
+    const to = args?.to as number | undefined;
+    const status = args?.status as any;
+    const limit = args?.limit as number | undefined;
+
+    switch (op) {
+      case "query": {
+        const executions = await historyManager.querySceneHistory(client, {
+          sceneId,
+          from,
+          to,
+          status,
+          limit,
+        });
+
+        let text = `Scene Execution History\n`;
+        if (sceneId) {
+          text += `Scene ID: ${sceneId}\n`;
+        }
+        text += `Found ${executions.length} executions\n`;
+
+        if (from || to) {
+          text += `Time range: ${from ? new Date(from).toISOString() : "beginning"} to ${to ? new Date(to).toISOString() : "now"}\n`;
+        }
+
+        text += `\nExecutions:\n`;
+        for (const exec of executions.slice(0, 50)) {
+          text += `\n- Scene ${exec.sceneId} (${exec.sceneName})`;
+          text += `\n  Started: ${new Date(exec.startTime).toISOString()}`;
+          if (exec.endTime) {
+            text += `\n  Ended: ${new Date(exec.endTime).toISOString()}`;
+            text += `\n  Duration: ${exec.duration}ms`;
+          }
+          text += `\n  Status: ${exec.status}`;
+          if (exec.error) {
+            text += `\n  Error: ${exec.error}`;
+          }
+        }
+
+        if (executions.length > 50) {
+          text += `\n\n... and ${executions.length - 50} more executions`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "stats":
+      case "performance": {
+        const executions = await historyManager.querySceneHistory(client, {
+          sceneId,
+          from,
+          to,
+          limit,
+        });
+
+        if (sceneId) {
+          // Single scene stats
+          const stats = historyManager.calculateSceneStats(executions);
+          if (!stats) {
+            return {
+              content: [{ type: "text", text: "No execution data found for this scene" }],
+            };
+          }
+
+          let text = `Scene Performance Statistics\n`;
+          text += `Scene ID: ${stats.sceneId}\n`;
+          text += `Scene Name: ${stats.sceneName}\n\n`;
+          text += `Total Executions: ${stats.totalExecutions}\n`;
+          text += `Successful: ${stats.successfulExecutions} (${stats.successRate.toFixed(1)}%)\n`;
+          text += `Failed: ${stats.failedExecutions}\n\n`;
+          text += `Execution Duration:\n`;
+          text += `  Average: ${stats.avgDuration.toFixed(0)}ms\n`;
+          text += `  Minimum: ${stats.minDuration}ms\n`;
+          text += `  Maximum: ${stats.maxDuration}ms\n\n`;
+          text += `Last Execution: ${new Date(stats.lastExecution).toISOString()}\n`;
+          if (stats.lastStatus) {
+            text += `Last Status: ${stats.lastStatus}\n`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } else {
+          // Multi-scene stats
+          const sceneMap = new Map<number, any[]>();
+          for (const exec of executions) {
+            if (!sceneMap.has(exec.sceneId)) {
+              sceneMap.set(exec.sceneId, []);
+            }
+            sceneMap.get(exec.sceneId)!.push(exec);
+          }
+
+          let text = `Scene Performance Statistics (All Scenes)\n`;
+          text += `Total scenes: ${sceneMap.size}\n\n`;
+
+          for (const [sid, execs] of Array.from(sceneMap.entries()).slice(0, 20)) {
+            const stats = historyManager.calculateSceneStats(execs);
+            if (stats) {
+              text += `\n${stats.sceneName} (ID: ${stats.sceneId})\n`;
+              text += `  Executions: ${stats.totalExecutions}, Success rate: ${stats.successRate.toFixed(1)}%\n`;
+              text += `  Avg duration: ${stats.avgDuration.toFixed(0)}ms\n`;
+            }
+          }
+
+          if (sceneMap.size > 20) {
+            text += `\n\n... and ${sceneMap.size - 20} more scenes`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_scene_history: unsupported op "${op}". Supported ops: query|stats|performance`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_backup") {
+    const { getBackupManager } = await import("./backup/backup-manager.js");
+    const { getExportFormatter } = await import("./backup/export-formatter.js");
+    const { getImportValidator } = await import("./backup/import-validator.js");
+
+    const backupManager = getBackupManager();
+    const exportFormatter = getExportFormatter();
+    const importValidator = getImportValidator();
+
+    const op = args?.op as string;
+    if (!op) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: 'fibaro_backup: missing required parameter "op"',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    switch (op) {
+      case "export": {
+        const exportFormat = (args?.export_format as string) || "json";
+        const include = args?.include as string[] | undefined;
+        const exclude = args?.exclude as string[] | undefined;
+        const includeUsers = args?.include_users as boolean | undefined;
+        const includePasswords = args?.include_passwords as boolean | undefined;
+
+        const exportData = await backupManager.exportSystem(client, {
+          format: exportFormat === "yaml" ? "yaml" : "json",
+          include,
+          exclude,
+          include_users: includeUsers,
+          include_passwords: includePasswords,
+        });
+
+        const formatted = exportFormatter.format(
+          exportData,
+          exportFormat === "yaml" ? "yaml" : "json"
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `System export complete\n\n` +
+                `Metadata:\n` +
+                `- Devices: ${exportData.metadata.device_count}\n` +
+                `- Scenes: ${exportData.metadata.scene_count}\n` +
+                `- Rooms: ${exportData.metadata.room_count}\n` +
+                `- Sections: ${exportData.metadata.section_count}\n` +
+                `- Variables: ${exportData.metadata.variable_count}\n` +
+                `- Users: ${exportData.metadata.user_count}\n` +
+                `- Export Duration: ${exportData.metadata.export_duration_ms}ms\n\n` +
+                `Export Data (${exportFormat}):\n\`\`\`${exportFormat}\n${formatted}\n\`\`\``,
+            },
+          ],
+        };
+      }
+
+      case "validate": {
+        const importData = args?.import_data as string | undefined;
+        if (!importData) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_backup: "validate" operation requires "import_data" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          // Detect format
+          const format = exportFormatter.detectFormat(importData);
+
+          // Parse import data
+          const exportData = exportFormatter.parse(importData, format);
+
+          // Validate
+          const validationResult = importValidator.validate(exportData);
+
+          let text = `Import validation ${validationResult.valid ? "PASSED" : "FAILED"}\n\n`;
+
+          if (validationResult.metadata) {
+            text +=
+              `Metadata:\n` +
+              `- Devices: ${validationResult.metadata.device_count}\n` +
+              `- Scenes: ${validationResult.metadata.scene_count}\n` +
+              `- Rooms: ${validationResult.metadata.room_count}\n` +
+              `- Sections: ${validationResult.metadata.section_count}\n` +
+              `- Variables: ${validationResult.metadata.variable_count}\n` +
+              `- Users: ${validationResult.metadata.user_count}\n\n`;
+          }
+
+          if (validationResult.errors.length > 0) {
+            text += `Errors (${validationResult.errors.length}):\n`;
+            for (const error of validationResult.errors) {
+              text += `- [${error.type}] ${error.field ? `${error.field}: ` : ""}${error.message}\n`;
+            }
+            text += "\n";
+          }
+
+          if (validationResult.warnings.length > 0) {
+            text += `Warnings (${validationResult.warnings.length}):\n`;
+            for (const warning of validationResult.warnings) {
+              text += `- [${warning.type}] ${warning.field ? `${warning.field}: ` : ""}${warning.message}\n`;
+            }
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_backup: validation failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "import": {
+        const importData = args?.import_data as string | undefined;
+        if (!importData) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_backup: "import" operation requires "import_data" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          // Detect format
+          const format = exportFormatter.detectFormat(importData);
+
+          // Parse import data
+          const exportData = exportFormatter.parse(importData, format);
+
+          // Validate first
+          const validationResult = importValidator.validate(exportData);
+          if (!validationResult.valid) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `fibaro_backup: import validation failed\n\n` +
+                    validationResult.errors.map((e) => `- ${e.message}`).join("\n"),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // Import
+          const importResult = await backupManager.importSystem(client, exportData, {
+            dry_run: args?.dry_run as boolean | undefined,
+            skip_existing: args?.skip_existing as boolean | undefined,
+            update_existing: args?.update_existing as boolean | undefined,
+            types: args?.import_types as string[] | undefined,
+          });
+
+          let text = `System import ${importResult.success ? "COMPLETED" : "FAILED"}\n\n`;
+
+          text +=
+            `Imported:\n` +
+            `- Devices: ${importResult.imported.devices}\n` +
+            `- Scenes: ${importResult.imported.scenes}\n` +
+            `- Rooms: ${importResult.imported.rooms}\n` +
+            `- Sections: ${importResult.imported.sections}\n` +
+            `- Variables: ${importResult.imported.variables}\n` +
+            `- Users: ${importResult.imported.users}\n\n`;
+
+          if (
+            importResult.skipped.devices > 0 ||
+            importResult.skipped.scenes > 0 ||
+            importResult.skipped.rooms > 0 ||
+            importResult.skipped.sections > 0 ||
+            importResult.skipped.variables > 0 ||
+            importResult.skipped.users > 0
+          ) {
+            text +=
+              `Skipped:\n` +
+              `- Devices: ${importResult.skipped.devices}\n` +
+              `- Scenes: ${importResult.skipped.scenes}\n` +
+              `- Rooms: ${importResult.skipped.rooms}\n` +
+              `- Sections: ${importResult.skipped.sections}\n` +
+              `- Variables: ${importResult.skipped.variables}\n` +
+              `- Users: ${importResult.skipped.users}\n\n`;
+          }
+
+          if (importResult.errors.length > 0) {
+            text += `Errors (${importResult.errors.length}):\n`;
+            for (const error of importResult.errors.slice(0, 10)) {
+              text += `- [${error.type}] ${error.name || error.id || "unknown"}: ${error.error}\n`;
+            }
+            if (importResult.errors.length > 10) {
+              text += `... and ${importResult.errors.length - 10} more errors\n`;
+            }
+            text += "\n";
+          }
+
+          text += `Duration: ${importResult.duration_ms}ms`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_backup: import failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_backup: unsupported op "${op}". Supported ops: export|import|validate`,
             },
           ],
         };

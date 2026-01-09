@@ -1,0 +1,55 @@
+{
+  "id": "away-mode-v1",
+  "name": "Away Mode",
+  "description": "Security scene that simulates presence when away by controlling lights randomly",
+  "category": "security",
+  "author": "Fibaro MCP",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "name": "light_ids",
+      "type": "string",
+      "description": "Comma-separated list of light device IDs to control (e.g., \"45,46,47\")",
+      "required": true
+    },
+    {
+      "name": "start_time",
+      "type": "time",
+      "description": "Start time for away mode in HH:MM format",
+      "required": true,
+      "default": "18:00"
+    },
+    {
+      "name": "end_time",
+      "type": "time",
+      "description": "End time for away mode in HH:MM format",
+      "required": true,
+      "default": "23:00"
+    },
+    {
+      "name": "min_interval_minutes",
+      "type": "number",
+      "description": "Minimum interval between light changes in minutes",
+      "required": false,
+      "default": 15,
+      "validation": {
+        "min": 5,
+        "max": 60
+      }
+    },
+    {
+      "name": "max_interval_minutes",
+      "type": "number",
+      "description": "Maximum interval between light changes in minutes",
+      "required": false,
+      "default": 45,
+      "validation": {
+        "min": 10,
+        "max": 120
+      }
+    }
+  ],
+  "lua_template": "--[[\n  Away Mode Scene\n  Simulates presence by randomly controlling lights\n]]\n\nlocal lightIds = {}\nfor id in string.gmatch({{light_ids}}, \"[^,]+\") do\n  table.insert(lightIds, tonumber(id))\nend\n\nlocal minInterval = {{min_interval_minutes}} * 60\nlocal maxInterval = {{max_interval_minutes}} * 60\n\nmath.randomseed(os.time())\n\n-- Function to check if we're in the active time window\nlocal function isActive()\n  local currentTime = os.date(\"*t\")\n  local currentMinutes = currentTime.hour * 60 + currentTime.min\n  \n  local startTime = {{start_time}}\n  local startHour, startMin = string.match(startTime, \"(%d+):(%d+)\")\n  local startMinutes = tonumber(startHour) * 60 + tonumber(startMin)\n  \n  local endTime = {{end_time}}\n  local endHour, endMin = string.match(endTime, \"(%d+):(%d+)\")\n  local endMinutes = tonumber(endHour) * 60 + tonumber(endMin)\n  \n  return currentMinutes >= startMinutes and currentMinutes <= endMinutes\nend\n\nif not isActive() then\n  fibaro.debug(\"Away mode not active at this time\")\n  return\nend\n\n-- Randomly turn lights on/off\nlocal numLights = #lightIds\nlocal lightsToControl = math.random(1, math.min(3, numLights))\n\nfor i = 1, lightsToControl do\n  local deviceId = lightIds[math.random(1, numLights)]\n  local action = math.random(0, 1) == 1 and \"turnOn\" or \"turnOff\"\n  \n  fibaro.call(deviceId, action)\n  fibaro.debug(\"Away mode: \" .. action .. \" light \" .. deviceId)\nend\n\n-- Schedule next run with random interval\nlocal nextInterval = math.random(minInterval, maxInterval)\nfibaro.debug(\"Next away mode check in \" .. (nextInterval / 60) .. \" minutes\")",
+  "required_devices": ["light"],
+  "tags": ["security", "away", "presence-simulation", "automation"]
+}

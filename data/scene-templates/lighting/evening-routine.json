@@ -1,0 +1,48 @@
+{
+  "id": "evening-routine-v1",
+  "name": "Evening Routine",
+  "description": "Gradually dim lights in the evening to prepare for sleep",
+  "category": "lighting",
+  "author": "Fibaro MCP",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "name": "light_ids",
+      "type": "string",
+      "description": "Comma-separated list of light device IDs (e.g., \"45,46,47\")",
+      "required": true
+    },
+    {
+      "name": "start_time",
+      "type": "time",
+      "description": "Time to start dimming in HH:MM format",
+      "required": true,
+      "default": "21:00"
+    },
+    {
+      "name": "duration_minutes",
+      "type": "number",
+      "description": "Dimming duration in minutes",
+      "required": false,
+      "default": 30,
+      "validation": {
+        "min": 5,
+        "max": 120
+      }
+    },
+    {
+      "name": "final_brightness",
+      "type": "number",
+      "description": "Final brightness level (0-100)",
+      "required": false,
+      "default": 10,
+      "validation": {
+        "min": 0,
+        "max": 100
+      }
+    }
+  ],
+  "lua_template": "--[[\n  Evening Routine Scene\n  Gradually dims lights in the evening\n]]\n\nlocal lightIds = {}\nfor id in string.gmatch({{light_ids}}, \"[^,]+\") do\n  table.insert(lightIds, tonumber(id))\nend\n\nlocal duration = {{duration_minutes}} * 60\nlocal finalBrightness = {{final_brightness}}\nlocal steps = 20\n\n-- Get current brightness of first light\nlocal startBrightness = tonumber(fibaro.getValue(lightIds[1], \"value\")) or 100\n\n-- Gradually decrease brightness\nfor step = 1, steps do\n  local progress = step / steps\n  local level = math.floor(startBrightness - (startBrightness - finalBrightness) * progress)\n  \n  for _, deviceId in ipairs(lightIds) do\n    fibaro.call(deviceId, \"setValue\", level)\n  end\n  \n  fibaro.sleep((duration / steps) * 1000)\nend\n\nfibaro.debug(\"Evening routine completed\")",
+  "required_devices": ["light"],
+  "tags": ["evening", "sleep", "sunset", "automation"]
+}

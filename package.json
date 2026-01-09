@@ -9,6 +9,7 @@
   },
   "files": [
     "dist",
+    "data",
     "README.md",
     "QUICKSTART.md",
     "EXAMPLES.md",
@@ -54,7 +55,16 @@
     "dotenv": "^16.4.5",
     "zod": "^3.23.8"
   },
+  "peerDependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "peerDependenciesMeta": {
+    "js-yaml": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.5",
     "@types/luaparse": "^0.2.13",
     "@types/nock": "^10.0.3",
     "@types/node": "^22.10.1",
