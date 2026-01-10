@@ -2004,6 +2004,105 @@ export function getTools(): ListToolsResult {
           required: ["op"],
         },
       },
+      {
+        name: "fibaro_integration",
+        description:
+          "External integrations: webhook server (HTTP endpoints) and MQTT bridge (pub/sub). Requires optional dependencies (express, mqtt).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: webhook_start|webhook_stop|webhook_status|mqtt_connect|mqtt_disconnect|mqtt_status|mqtt_publish",
+              enum: [
+                "webhook_start",
+                "webhook_stop",
+                "webhook_status",
+                "mqtt_connect",
+                "mqtt_disconnect",
+                "mqtt_status",
+                "mqtt_publish",
+              ],
+            },
+            webhook_config: {
+              type: "object",
+              description: "Webhook server configuration (for webhook_start)",
+              properties: {
+                port: { type: "number" },
+                host: { type: "string" },
+                authToken: { type: "string" },
+                routes: { type: "array" },
+              },
+            },
+            mqtt_config: {
+              type: "object",
+              description: "MQTT configuration (for mqtt_connect)",
+              properties: {
+                broker: { type: "string" },
+                clientId: { type: "string" },
+                username: { type: "string" },
+                password: { type: "string" },
+                subscriptions: { type: "array" },
+                publishState: { type: "boolean" },
+              },
+            },
+            topic: {
+              type: "string",
+              description: "MQTT topic (for mqtt_publish)",
+            },
+            message: {
+              type: "string",
+              description: "MQTT message payload (for mqtt_publish)",
+            },
+            qos: {
+              type: "number",
+              enum: [0, 1, 2],
+              description: "MQTT QoS level (for mqtt_publish)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_automation",
+        description:
+          "Advanced automation builder: create complex multi-step automations with conditions and actions, generate Fibaro Lua scenes",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: create|validate|generate_lua",
+              enum: ["create", "validate", "generate_lua"],
+            },
+            automation: {
+              type: "object",
+              description: "Automation definition",
+              properties: {
+                name: { type: "string" },
+                description: { type: "string" },
+                conditions: { type: "object" },
+                actions: { type: "array" },
+                enabled: { type: "boolean" },
+              },
+              required: ["name", "conditions", "actions"],
+            },
+            deploy: {
+              type: "boolean",
+              description: "Deploy automation as Fibaro scene (for create operation)",
+            },
+          },
+          required: ["op"],
+        },
+      },
     ],
   };
 
@@ -3999,6 +4098,372 @@ async function handleToolCallInternal(
             {
               type: "text",
               text: `fibaro_analytics: unsupported op "${op}". Supported ops: device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_integration") {
+    const op = args?.op as string;
+    if (!op) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: 'fibaro_integration: missing required parameter "op"',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Webhook operations
+    if (op === "webhook_start") {
+      const webhookConfig = args?.webhook_config as any;
+      if (!webhookConfig) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: 'fibaro_integration: "webhook_start" requires "webhook_config" parameter',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      try {
+        const { createWebhookServer } = await import("./integrations/webhook-server.js");
+        const config = {
+          enabled: true,
+          port: webhookConfig.port || 8080,
+          host: webhookConfig.host,
+          authToken: webhookConfig.authToken,
+          routes: webhookConfig.routes || [],
+        };
+
+        const server = await createWebhookServer(config, client);
+        await server.start();
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Webhook server started successfully on port ${config.port}\n\nEndpoints:\n- Health: http://${config.host || "0.0.0.0"}:${config.port}/health\n${config.routes.length > 0 ? `\nConfigured routes:\n${config.routes.map((r: any) => `- ${r.method} ${r.path} → ${r.action}`).join("\n")}` : ""}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to start webhook server: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    if (op === "webhook_stop") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Webhook server stop not implemented - server instances are not persisted.\nRestart the MCP server to stop all webhook servers.",
+          },
+        ],
+      };
+    }
+
+    if (op === "webhook_status") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Webhook server status not implemented - server instances are not persisted.\nUse environment variables to configure permanent webhook servers.",
+          },
+        ],
+      };
+    }
+
+    // MQTT operations
+    if (op === "mqtt_connect") {
+      const mqttConfig = args?.mqtt_config as any;
+      if (!mqttConfig) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: 'fibaro_integration: "mqtt_connect" requires "mqtt_config" parameter',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      try {
+        const { createMqttBridge } = await import("./integrations/mqtt-bridge.js");
+        const config = {
+          enabled: true,
+          broker: mqttConfig.broker,
+          clientId: mqttConfig.clientId || "fibaro-mcp",
+          username: mqttConfig.username,
+          password: mqttConfig.password,
+          subscriptions: mqttConfig.subscriptions || [],
+          publishState: mqttConfig.publishState || false,
+        };
+
+        const bridge = await createMqttBridge(config, client);
+        await bridge.connect();
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `MQTT bridge connected to ${config.broker}\n\nClient ID: ${config.clientId}\nSubscriptions: ${config.subscriptions.length}\nState publishing: ${config.publishState ? "enabled" : "disabled"}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to connect MQTT bridge: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    if (op === "mqtt_disconnect") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "MQTT disconnect not implemented - bridge instances are not persisted.\nRestart the MCP server to disconnect all MQTT bridges.",
+          },
+        ],
+      };
+    }
+
+    if (op === "mqtt_status") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "MQTT status not implemented - bridge instances are not persisted.\nUse environment variables to configure permanent MQTT bridges.",
+          },
+        ],
+      };
+    }
+
+    if (op === "mqtt_publish") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "MQTT publish not implemented - bridge instances are not persisted.\nConnect to MQTT first using mqtt_connect to publish messages.",
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `fibaro_integration: unsupported op "${op}". Supported ops: webhook_start|webhook_stop|webhook_status|mqtt_connect|mqtt_disconnect|mqtt_status|mqtt_publish`,
+        },
+      ],
+    };
+  }
+
+  if (name === "fibaro_automation") {
+    const { getWorkflowEngine } = await import("./automation/workflow-engine.js");
+    const workflow = getWorkflowEngine();
+
+    const op = args?.op as string;
+    if (!op) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: 'fibaro_automation: missing required parameter "op"',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const automation = args?.automation as any;
+
+    switch (op) {
+      case "validate": {
+        if (!automation) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_automation: "validate" operation requires "automation" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const validation = workflow.validateAutomation(automation);
+
+          let text = `Automation Validation: ${automation.name}\n\n`;
+          text += `Status: ${validation.valid ? "VALID ✓" : "INVALID ✗"}\n\n`;
+
+          if (validation.errors.length > 0) {
+            text += `Errors (${validation.errors.length}):\n`;
+            for (const error of validation.errors) {
+              text += `  ✗ ${error}\n`;
+            }
+            text += "\n";
+          }
+
+          if (validation.warnings.length > 0) {
+            text += `Warnings (${validation.warnings.length}):\n`;
+            for (const warning of validation.warnings) {
+              text += `  ⚠ ${warning}\n`;
+            }
+          }
+
+          if (validation.valid && validation.warnings.length === 0) {
+            text += "No errors or warnings found.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_automation: validation failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "generate_lua": {
+        if (!automation) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_automation: "generate_lua" operation requires "automation" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const luaCode = workflow.generateLuaCode(automation);
+
+          let text = `Generated Lua Code for: ${automation.name}\n\n`;
+          text += "```lua\n";
+          text += luaCode;
+          text += "\n```\n\n";
+          text += `Total lines: ${luaCode.split("\n").length}`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_automation: generate_lua failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "create": {
+        if (!automation) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_automation: "create" operation requires "automation" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const deploy = args?.deploy as boolean | undefined;
+
+        try {
+          const result = await workflow.createAutomation(client, automation, deploy);
+
+          let text = `Automation Created: ${automation.name}\n\n`;
+
+          if (result.validation.valid) {
+            text += `Status: SUCCESS ✓\n\n`;
+
+            if (deploy && result.sceneId) {
+              text += `Deployed as Scene ID: ${result.sceneId}\n\n`;
+            }
+
+            text += "Generated Lua Code:\n";
+            text += "```lua\n";
+            text += result.luaCode;
+            text += "\n```\n";
+
+            if (result.validation.warnings.length > 0) {
+              text += `\nWarnings (${result.validation.warnings.length}):\n`;
+              for (const warning of result.validation.warnings) {
+                text += `  ⚠ ${warning}\n`;
+              }
+            }
+          } else {
+            text += `Status: FAILED ✗\n\n`;
+            text += `Errors (${result.validation.errors.length}):\n`;
+            for (const error of result.validation.errors) {
+              text += `  ✗ ${error}\n`;
+            }
+          }
+
+          return {
+            content: [{ type: "text", text }],
+            isError: !result.validation.valid,
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_automation: create failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_automation: unsupported op "${op}". Supported ops: create|validate|generate_lua`,
             },
           ],
         };
