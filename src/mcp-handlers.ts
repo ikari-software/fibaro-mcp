@@ -3207,8 +3207,9 @@ async function handleToolCallInternal(
     switch (op) {
       case "export": {
         const exportFormat = (args?.export_format as string) || "json";
-        const include = args?.include as string[] | undefined;
-        const exclude = args?.exclude as string[] | undefined;
+        type DataType = "devices" | "scenes" | "rooms" | "sections" | "variables" | "users";
+        const include = args?.include as DataType[] | undefined;
+        const exclude = args?.exclude as DataType[] | undefined;
         const includeUsers = args?.include_users as boolean | undefined;
         const includePasswords = args?.include_passwords as boolean | undefined;
 
@@ -3351,11 +3352,12 @@ async function handleToolCallInternal(
           }
 
           // Import
+          type ImportDataType = "devices" | "scenes" | "rooms" | "sections" | "variables" | "users";
           const importResult = await backupManager.importSystem(client, exportData, {
             dry_run: args?.dry_run as boolean | undefined,
             skip_existing: args?.skip_existing as boolean | undefined,
             update_existing: args?.update_existing as boolean | undefined,
-            types: args?.import_types as string[] | undefined,
+            types: args?.import_types as ImportDataType[] | undefined,
           });
 
           let text = `System import ${importResult.success ? "COMPLETED" : "FAILED"}\n\n`;

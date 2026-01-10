@@ -123,6 +123,6 @@ export interface SceneHistoryQueryParams {
   sceneId?: number;
   from?: number;
   to?: number;
-  status?: "success" | "failure" | "timeout";
+  status?: "success" | "failure" | "timeout" | "running";
   limit?: number;
 }

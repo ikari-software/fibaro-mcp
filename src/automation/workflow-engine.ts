@@ -268,9 +268,10 @@ export class WorkflowEngine {
       }
 
       case "delay": {
-        // Use fibaro.sleep() for delays
-        const delaySeconds = (action.delay! / 1000).toFixed(3);
-        return `fibaro.sleep(${delaySeconds * 1000}) -- ${delaySeconds}s delay`;
+        // Use fibaro.sleep() for delays (expects milliseconds)
+        const delayMs = action.delay!;
+        const delaySeconds = (delayMs / 1000).toFixed(3);
+        return `fibaro.sleep(${delayMs}) -- ${delaySeconds}s delay`;
       }
 
       case "variable_set": {
