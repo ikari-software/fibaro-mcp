@@ -7,6 +7,13 @@ import {
   type ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { findMatches, isPluralishQuery } from "./name-lookup.js";
+import {
+  aggregateDeviceStats,
+  validateParams,
+  formatForResponse,
+  type AggregationInterval,
+  type MetricType,
+} from "./energy-aggregator.js";
 
 export type FibaroClientLike = {
   getDevices: () => Promise<any[]>;
@@ -360,6 +367,21 @@ export function getTools(): ListToolsResult {
             users: { type: "array", items: { type: "number" } },
             device_id: { type: "number" },
             params: { type: "object" },
+            aggregation: {
+              type: "string",
+              enum: ["raw", "1min", "5min", "15min", "1hour", "6hour", "auto"],
+              description: "For device_stats: aggregation interval (auto selects based on time span)",
+            },
+            max_points: {
+              type: "number",
+              description: "For device_stats: max data points (default: 1000)",
+            },
+            metrics: {
+              type: "array",
+              items: { type: "string", enum: ["power", "energy", "voltage", "current"] },
+              description: "For device_stats: metrics to include",
+            },
+            property: { type: "string", description: "For device_stats: legacy property filter" },
           },
           required: ["op"],
         },
@@ -2227,11 +2249,19 @@ async function handleToolCallInternal(
           event_name: args?.event_name,
           data: args?.data,
         });
-      case "device_stats":
+      case "device_stats": {
+        // Support both direct params and nested params object for backward compatibility
+        const params = (args?.params as Record<string, any>) || {};
         return handleToolCall(client, "get_device_stats", {
           device_id: args?.device_id,
-          params: args?.params,
+          from: args?.from ?? params.from,
+          to: args?.to ?? params.to,
+          property: args?.property ?? params.property,
+          aggregation: args?.aggregation ?? params.aggregation,
+          max_points: args?.max_points ?? params.max_points,
+          metrics: args?.metrics ?? params.metrics,
         });
+      }
       default:
         return {
           content: [
@@ -3856,13 +3886,63 @@ async function handleToolCallInternal(
     }
 
     case "get_device_stats": {
-      const stats = await client.getDeviceStats(args?.device_id as number, {
-        from: args?.from as number,
-        to: args?.to as number,
-        property: args?.property as string,
+      const deviceId = args?.device_id as number;
+      const from = args?.from as number | undefined;
+      const to = args?.to as number | undefined;
+      const aggregation = args?.aggregation as AggregationInterval | undefined;
+      const maxPoints = args?.max_points as number | undefined;
+      const metrics = args?.metrics as MetricType[] | undefined;
+      const property = args?.property as string | undefined;
+
+      // If no time range specified, use legacy behavior (pass-through to API)
+      if (from === undefined || to === undefined) {
+        const stats = await client.getDeviceStats(deviceId, { from, to, property });
+        return {
+          content: [{ type: "text", text: JSON.stringify(stats, null, 2) }],
+        };
+      }
+
+      // Validate parameters
+      const validation = validateParams({
+        device_id: deviceId,
+        from,
+        to,
+        aggregation,
+        max_points: maxPoints,
+        metrics,
       });
+
+      if (!validation.valid) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `get_device_stats: ${validation.errors.join(", ")}`,
+        );
+      }
+
+      // Fetch raw stats from Fibaro API
+      const rawStats = await client.getDeviceStats(deviceId, { from, to, property });
+
+      // Get device name for context
+      let deviceName: string | undefined;
+      try {
+        const device = await client.getDevice(deviceId);
+        deviceName = device?.name;
+      } catch {
+        // Device name is optional, continue without it
+      }
+
+      // Aggregate the data
+      const aggregatedStats = aggregateDeviceStats(
+        rawStats,
+        validation.normalized,
+        deviceName,
+      );
+
+      // Format for response (round numbers)
+      const formattedStats = formatForResponse(aggregatedStats);
+
       return {
-        content: [{ type: "text", text: JSON.stringify(stats, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(formattedStats, null, 2) }],
       };
     }
 

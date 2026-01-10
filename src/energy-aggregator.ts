@@ -421,12 +421,14 @@ export function ensureResponseFits(
   const maxPoints = params.max_points || DEFAULT_MAX_POINTS;
   const warnings: string[] = [];
 
-  // Determine initial aggregation interval
-  let currentInterval = determineAggregationInterval(spanSeconds, params.aggregation);
-  let intervalSeconds = AGGREGATION_INTERVALS[currentInterval === "auto" ? "raw" : currentInterval];
+  // Determine initial aggregation interval (excluding "auto" for actual processing)
+  type NonAutoInterval = Exclude<AggregationInterval, "auto">;
+  const determinedInterval = determineAggregationInterval(spanSeconds, params.aggregation);
+  let currentInterval: NonAutoInterval = determinedInterval === "auto" ? "raw" : determinedInterval;
+  let intervalSeconds = AGGREGATION_INTERVALS[currentInterval];
 
   // List of progressively larger intervals
-  const intervalProgression: AggregationInterval[] = [
+  const intervalProgression: NonAutoInterval[] = [
     "raw",
     "1min",
     "5min",

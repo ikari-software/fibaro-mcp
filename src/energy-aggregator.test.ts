@@ -146,19 +146,25 @@ describe("groupIntoBuckets", () => {
 
   it("groups data into 60-second buckets", () => {
     const buckets = groupIntoBuckets(sampleData, 60, 1000, 1200);
-    expect(buckets.size).toBe(3);
+    // Data points: 1000, 1030, 1060, 1090, 1120, 1150
+    // Buckets: floor(t/60)*60 -> 960, 1020, 1020, 1080, 1080, 1140
+    expect(buckets.size).toBe(4);
 
     const bucket960 = buckets.get(960); // floor(1000/60)*60 = 960
     expect(bucket960).toBeDefined();
-    expect(bucket960).toHaveLength(2);
+    expect(bucket960).toHaveLength(1); // Only timestamp 1000
 
-    const bucket1020 = buckets.get(1020);
+    const bucket1020 = buckets.get(1020); // timestamps 1030, 1060
     expect(bucket1020).toBeDefined();
     expect(bucket1020).toHaveLength(2);
 
-    const bucket1080 = buckets.get(1080);
+    const bucket1080 = buckets.get(1080); // timestamps 1090, 1120
     expect(bucket1080).toBeDefined();
     expect(bucket1080).toHaveLength(2);
+
+    const bucket1140 = buckets.get(1140); // timestamp 1150
+    expect(bucket1140).toBeDefined();
+    expect(bucket1140).toHaveLength(1);
   });
 
   it("returns individual points for raw mode (intervalSeconds = 0)", () => {
@@ -695,7 +701,7 @@ describe("edge cases", () => {
     ];
 
     const result = aggregateAverage(smallValues);
-    expect(result.avg).toBe(0.00015);
+    expect(result.avg).toBeCloseTo(0.00015, 10);
   });
 
   it("handles zero values", () => {
