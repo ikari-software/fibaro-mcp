@@ -1943,6 +1943,67 @@ export function getTools(): ListToolsResult {
           required: ["op"],
         },
       },
+      {
+        name: "fibaro_analytics",
+        description:
+          "Analytics and insights: device usage patterns, energy trends, scene frequency, system health, dashboard generation",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description:
+                "Operation: device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity",
+              enum: [
+                "device_usage",
+                "energy_trends",
+                "scene_frequency",
+                "system_health",
+                "dashboard",
+                "hourly_distribution",
+                "room_activity",
+              ],
+            },
+            from: {
+              type: "number",
+              description: "Start timestamp (default: 7 days ago)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp (default: now)",
+            },
+            device_ids: {
+              type: "array",
+              items: { type: "number" },
+              description: "Filter by device IDs",
+            },
+            scene_ids: {
+              type: "array",
+              items: { type: "number" },
+              description: "Filter by scene IDs",
+            },
+            room_ids: {
+              type: "array",
+              items: { type: "number" },
+              description: "Filter by room IDs",
+            },
+            group_by: {
+              type: "string",
+              enum: ["hour", "day", "week", "month"],
+              description: "Time grouping for trends (default: day)",
+            },
+            limit: {
+              type: "number",
+              description: "Limit number of results (default: all)",
+            },
+          },
+          required: ["op"],
+        },
+      },
     ],
   };
 
@@ -2040,6 +2101,12 @@ export function getResources(): ListResourcesResult {
         name: "Weather",
         description: "Current weather information",
       },
+      {
+        uri: "fibaro://analytics/dashboard",
+        mimeType: "application/json",
+        name: "Analytics Dashboard",
+        description: "Comprehensive analytics dashboard with usage patterns, energy trends, and system health",
+      },
     ],
   };
 }
@@ -2069,6 +2136,26 @@ export async function handleResourceRead(
     }
     case "fibaro://weather": {
       data = await client.getWeather();
+      break;
+    }
+    case "fibaro://analytics/dashboard": {
+      const { getAnalyticsEngine } = await import("./history/analytics-engine.js");
+      const analytics = getAnalyticsEngine();
+
+      // Parse query parameters from URI
+      const url = new URL(uri, "fibaro://dummy");
+      const period = url.searchParams.get("period");
+
+      let options = {};
+      if (period) {
+        const days = period === "30d" ? 30 : period === "14d" ? 14 : 7;
+        options = {
+          from: Date.now() - days * 24 * 3600000,
+          to: Date.now(),
+        };
+      }
+
+      data = await analytics.generateDashboard(client, options);
       break;
     }
     default:
@@ -3592,6 +3679,326 @@ async function handleToolCallInternal(
             {
               type: "text",
               text: `fibaro_repl: unsupported op "${op}". Supported ops: execute|list_sessions|clear_session|clear_all|sync`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_analytics") {
+    const { getAnalyticsEngine } = await import("./history/analytics-engine.js");
+    const analytics = getAnalyticsEngine();
+
+    const op = args?.op as string;
+    if (!op) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: 'fibaro_analytics: missing required parameter "op"',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const options = {
+      from: args?.from as number | undefined,
+      to: args?.to as number | undefined,
+      device_ids: args?.device_ids as number[] | undefined,
+      scene_ids: args?.scene_ids as number[] | undefined,
+      room_ids: args?.room_ids as number[] | undefined,
+      group_by: args?.group_by as "hour" | "day" | "week" | "month" | undefined,
+      limit: args?.limit as number | undefined,
+    };
+
+    switch (op) {
+      case "device_usage": {
+        try {
+          const patterns = await analytics.analyzeDeviceUsage(client, options);
+
+          let text = `Device Usage Analysis\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Total devices: ${patterns.length}\n\n`;
+
+          if (patterns.length > 0) {
+            text += "Top Devices by Activity:\n";
+            for (const pattern of patterns.slice(0, 20)) {
+              text +=
+                `\n${pattern.deviceName} [${pattern.deviceId}]\n` +
+                `  Type: ${pattern.deviceType}\n` +
+                `  Activations: ${pattern.activations}\n` +
+                `  Avg/day: ${pattern.avgDailyUsage.toFixed(2)}\n` +
+                `  Peak hours: ${pattern.peakHours.join(", ")}\n` +
+                `  Last active: ${new Date(pattern.lastActive).toISOString()}\n`;
+            }
+            if (patterns.length > 20) {
+              text += `\n... and ${patterns.length - 20} more devices`;
+            }
+          } else {
+            text += "No device activity found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: device_usage failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "energy_trends": {
+        try {
+          const trends = await analytics.analyzeEnergyTrends(client, options);
+
+          let text = `Energy Consumption Trends\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Group by: ${options.group_by || "day"}\n`;
+          text += `Intervals: ${trends.length}\n\n`;
+
+          if (trends.length > 0) {
+            const totalConsumption = trends.reduce((sum, t) => sum + t.totalConsumption, 0);
+            text += `Total Consumption: ${totalConsumption.toFixed(2)} kWh\n\n`;
+
+            text += "Trends:\n";
+            for (const trend of trends.slice(0, 10)) {
+              text +=
+                `\n${new Date(trend.timestamp).toISOString()}\n` +
+                `  Total: ${trend.totalConsumption.toFixed(2)} kWh\n` +
+                `  Top consumers: ${trend.devices.slice(0, 3).map((d) => `${d.deviceName} (${d.consumption.toFixed(2)} kWh)`).join(", ")}\n`;
+            }
+            if (trends.length > 10) {
+              text += `\n... and ${trends.length - 10} more intervals`;
+            }
+          } else {
+            text += "No energy data found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: energy_trends failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "scene_frequency": {
+        try {
+          const frequencies = await analytics.analyzeSceneFrequency(client, options);
+
+          let text = `Scene Execution Frequency\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Total scenes: ${frequencies.length}\n\n`;
+
+          if (frequencies.length > 0) {
+            text += "Top Scenes by Execution:\n";
+            for (const freq of frequencies.slice(0, 20)) {
+              text +=
+                `\n${freq.sceneName} [${freq.sceneId}]\n` +
+                `  Executions: ${freq.executions}\n` +
+                `  Avg/day: ${freq.avgExecutionsPerDay.toFixed(2)}\n` +
+                `  Success rate: ${freq.successRate.toFixed(1)}%\n` +
+                `  Last execution: ${new Date(freq.lastExecution).toISOString()}\n`;
+            }
+            if (frequencies.length > 20) {
+              text += `\n... and ${frequencies.length - 20} more scenes`;
+            }
+          } else {
+            text += "No scene executions found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: scene_frequency failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "system_health": {
+        try {
+          const health = await analytics.analyzeSystemHealth(client);
+
+          let text = `System Health Report\n\n`;
+          text += `Timestamp: ${new Date(health.timestamp).toISOString()}\n\n`;
+
+          text +=
+            `Dead Devices: ${health.deadDevices}\n` +
+            (health.deadDeviceIds.length > 0
+              ? `  IDs: ${health.deadDeviceIds.join(", ")}\n`
+              : "") +
+            `\nFailed Scenes: ${health.failedScenes}\n` +
+            (health.failedSceneIds.length > 0
+              ? `  IDs: ${health.failedSceneIds.join(", ")}\n`
+              : "") +
+            `\nError Rate: ${health.errorRate.toFixed(2)}%\n` +
+            `Warnings (24h): ${health.warningCount}\n` +
+            `Uptime: ${(health.uptime / 3600).toFixed(2)} hours\n`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: system_health failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "dashboard": {
+        try {
+          const dashboard = await analytics.generateDashboard(client, options);
+
+          let text = `Analytics Dashboard\n\n`;
+          text +=
+            `Period: ${new Date(dashboard.period.from).toISOString()} to ${new Date(dashboard.period.to).toISOString()}\n` +
+            `Duration: ${dashboard.period.days.toFixed(1)} days\n\n`;
+
+          text +=
+            `Summary:\n` +
+            `  Health Score: ${dashboard.summary.healthScore}/100\n` +
+            `  Total Activations: ${dashboard.summary.totalActivations}\n` +
+            `  Total Energy: ${dashboard.summary.totalEnergyConsumption.toFixed(2)} kWh\n` +
+            `  Most Active Device: ${dashboard.summary.mostActiveDevice}\n` +
+            `  Most Used Scene: ${dashboard.summary.mostUsedScene}\n\n`;
+
+          text +=
+            `System Health:\n` +
+            `  Dead Devices: ${dashboard.systemHealth.deadDevices}\n` +
+            `  Failed Scenes: ${dashboard.systemHealth.failedScenes}\n` +
+            `  Error Rate: ${dashboard.systemHealth.errorRate.toFixed(2)}%\n` +
+            `  Warnings: ${dashboard.systemHealth.warningCount}\n\n`;
+
+          text += `Top Devices (by activity):\n`;
+          for (const device of dashboard.topDevices.slice(0, 5)) {
+            text += `  ${device.deviceName}: ${device.activations} activations, ${device.avgDailyUsage.toFixed(2)}/day\n`;
+          }
+
+          text += `\nTop Scenes (by execution):\n`;
+          for (const scene of dashboard.topScenes.slice(0, 5)) {
+            text += `  ${scene.sceneName}: ${scene.executions} executions, ${scene.avgExecutionsPerDay.toFixed(2)}/day\n`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: dashboard failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "hourly_distribution": {
+        try {
+          const distribution = await analytics.getHourlyDistribution(client, options);
+
+          let text = `Hourly Activity Distribution\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n\n`;
+
+          for (const hour of distribution) {
+            const bar = "█".repeat(Math.round(hour.percentage / 2));
+            text += `${hour.hour.toString().padStart(2, "0")}:00  ${bar} ${hour.count} (${hour.percentage.toFixed(1)}%)\n`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: hourly_distribution failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "room_activity": {
+        try {
+          const rooms = await analytics.getRoomActivity(client, options);
+
+          let text = `Room Activity Summary\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Total rooms: ${rooms.length}\n\n`;
+
+          if (rooms.length > 0) {
+            text += "Rooms by Activity:\n";
+            for (const room of rooms.slice(0, 20)) {
+              text +=
+                `\n${room.roomName} [${room.roomId}]\n` +
+                `  Activations: ${room.activations}\n` +
+                `  Avg/day: ${room.avgDailyActivations.toFixed(2)}\n` +
+                `  Active devices: ${room.activeDevices}/${room.totalDevices}\n`;
+            }
+            if (rooms.length > 20) {
+              text += `\n... and ${rooms.length - 20} more rooms`;
+            }
+          } else {
+            text += "No room activity found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: room_activity failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_analytics: unsupported op "${op}". Supported ops: device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity`,
             },
           ],
         };
