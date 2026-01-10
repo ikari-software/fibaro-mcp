@@ -44,7 +44,7 @@ class FibaroMCPServer {
     this.server = new Server(
       {
         name: "fibaro-mcp",
-        version: "3.0.0-beta.1",
+        version: "3.0.0-rc.1",
       },
       {
         capabilities: {
