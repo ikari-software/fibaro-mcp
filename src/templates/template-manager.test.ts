@@ -363,13 +363,15 @@ describe("TemplateManager", () => {
 
     it("should return templates from specified category", () => {
       const lightingTemplates = manager.getByCategory("lighting");
-      expect(lightingTemplates).toHaveLength(2);
+      // Includes both test templates (2) and file system templates (2 from data/scene-templates/lighting)
+      expect(lightingTemplates).toHaveLength(4);
       expect(lightingTemplates.every((t) => t.category === "lighting")).toBe(true);
     });
 
     it("should return empty array for category with no templates", () => {
       const energyTemplates = manager.getByCategory("energy");
-      expect(energyTemplates).toHaveLength(0);
+      // Now has 1 template from file system (data/scene-templates/energy/peak-saver.json)
+      expect(energyTemplates).toHaveLength(1);
     });
   });
 

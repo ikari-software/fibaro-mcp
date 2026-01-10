@@ -1772,6 +1772,177 @@ export function getTools(): ListToolsResult {
           required: ["op"],
         },
       },
+      {
+        name: "fibaro_bulk",
+        description:
+          "Bulk operations: execute batch actions on multiple devices matching query criteria (room, type, interface, name pattern, properties)",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: execute|preview",
+              enum: ["execute", "preview"],
+            },
+            query: {
+              type: "object",
+              description: "Device query criteria",
+              properties: {
+                device_ids: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Specific device IDs to target",
+                },
+                room_ids: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Filter by room IDs",
+                },
+                section_ids: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Filter by section IDs",
+                },
+                type: {
+                  type: "string",
+                  description: "Filter by device type",
+                },
+                base_type: {
+                  type: "string",
+                  description: "Filter by base type",
+                },
+                interface: {
+                  type: "string",
+                  description: "Filter by interface/capability",
+                },
+                name_pattern: {
+                  type: "string",
+                  description: "Filter by name pattern (regex)",
+                },
+                property: {
+                  type: "object",
+                  description: "Filter by property value",
+                  properties: {
+                    name: { type: "string" },
+                    value: {},
+                    operator: {
+                      type: "string",
+                      enum: ["==", "!=", ">", "<", ">=", "<="],
+                    },
+                  },
+                  required: ["name", "value"],
+                },
+                enabled: {
+                  type: "boolean",
+                  description: "Filter by enabled status",
+                },
+                visible: {
+                  type: "boolean",
+                  description: "Filter by visible status",
+                },
+              },
+            },
+            action: {
+              type: "object",
+              description: "Action to execute on matched devices",
+              properties: {
+                type: {
+                  type: "string",
+                  enum: ["device_action", "set_property", "update_config", "enable", "disable"],
+                  description: "Type of action",
+                },
+                action: {
+                  type: "string",
+                  description: "Action name (for device_action)",
+                },
+                args: {
+                  type: "array",
+                  description: "Action arguments (for device_action)",
+                },
+                property: {
+                  type: "string",
+                  description: "Property name (for set_property)",
+                },
+                value: {
+                  description: "Property value (for set_property)",
+                },
+                config: {
+                  type: "object",
+                  description: "Config updates (for update_config)",
+                },
+              },
+              required: ["type"],
+            },
+            options: {
+              type: "object",
+              description: "Operation options",
+              properties: {
+                dry_run: {
+                  type: "boolean",
+                  description: "Preview without executing (default: false)",
+                },
+                parallel: {
+                  type: "boolean",
+                  description: "Execute in parallel (default: false)",
+                },
+                concurrency: {
+                  type: "number",
+                  description: "Max parallel operations (default: 5)",
+                },
+                stop_on_error: {
+                  type: "boolean",
+                  description: "Stop on first error (default: false)",
+                },
+                rollback_on_error: {
+                  type: "boolean",
+                  description: "Rollback successful operations on error (default: false)",
+                },
+              },
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_repl",
+        description:
+          "Interactive Lua REPL: execute Lua code in sandboxed temporary scenes, manage REPL sessions, get execution output",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: execute|list_sessions|clear_session|clear_all|sync",
+              enum: ["execute", "list_sessions", "clear_session", "clear_all", "sync"],
+            },
+            code: {
+              type: "string",
+              description: "Lua code to execute (required for execute operation)",
+            },
+            session_id: {
+              type: "string",
+              description: "REPL session ID (optional - will create new session if not provided)",
+            },
+            timeout: {
+              type: "number",
+              description: "Execution timeout in milliseconds (default: 30000)",
+            },
+            room_id: {
+              type: "number",
+              description: "Room ID for new session scenes (default: 1)",
+            },
+          },
+          required: ["op"],
+        },
+      },
     ],
   };
 
@@ -3065,6 +3236,362 @@ async function handleToolCallInternal(
             {
               type: "text",
               text: `fibaro_backup: unsupported op "${op}". Supported ops: export|import|validate`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_bulk") {
+    const { getBulkOperationsManager } = await import("./bulk/bulk-operations.js");
+    const bulkOps = getBulkOperationsManager();
+
+    const op = args?.op as string;
+    if (!op) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: 'fibaro_bulk: missing required parameter "op"',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    switch (op) {
+      case "execute": {
+        const query = args?.query as any;
+        const action = args?.action as any;
+        const options = (args?.options as any) || {};
+
+        if (!query) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_bulk: "execute" operation requires "query" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        if (!action) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_bulk: "execute" operation requires "action" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const result = await bulkOps.executeBulkOperation(client, query, action, options);
+
+          let text = `Bulk Operation ${result.failed > 0 ? "COMPLETED WITH ERRORS" : "SUCCESSFUL"}\n\n`;
+
+          text +=
+            `Summary:\n` +
+            `- Total devices: ${result.total}\n` +
+            `- Successful: ${result.successful}\n` +
+            `- Failed: ${result.failed}\n` +
+            `- Skipped: ${result.skipped}\n` +
+            `- Duration: ${result.duration}ms\n\n`;
+
+          if (result.successful > 0) {
+            text += `Successful Operations (${result.successful}):\n`;
+            const successful = result.results.filter((r) => r.success);
+            for (const r of successful.slice(0, 10)) {
+              text += `✓ [${r.deviceId}] ${r.deviceName}`;
+              if (r.value !== undefined) {
+                text += ` → ${r.value}`;
+              }
+              text += "\n";
+            }
+            if (successful.length > 10) {
+              text += `... and ${successful.length - 10} more\n`;
+            }
+            text += "\n";
+          }
+
+          if (result.failed > 0) {
+            text += `Failed Operations (${result.failed}):\n`;
+            const failed = result.results.filter((r) => !r.success);
+            for (const r of failed.slice(0, 10)) {
+              text += `✗ [${r.deviceId}] ${r.deviceName}: ${r.error}\n`;
+            }
+            if (failed.length > 10) {
+              text += `... and ${failed.length - 10} more\n`;
+            }
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_bulk: execute failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "preview": {
+        const query = args?.query as any;
+
+        if (!query) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_bulk: "preview" operation requires "query" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const devices = await bulkOps.previewQuery(client, query);
+
+          let text = `Preview: ${devices.length} devices match query\n\n`;
+
+          if (devices.length > 0) {
+            text += "Matching Devices:\n";
+            for (const device of devices.slice(0, 20)) {
+              text +=
+                `- [${device.id}] ${device.name} (${device.type}, Room ${device.roomID}, ${device.enabled ? "enabled" : "disabled"})\n`;
+            }
+            if (devices.length > 20) {
+              text += `... and ${devices.length - 20} more\n`;
+            }
+          } else {
+            text += "No devices match the query criteria.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_bulk: preview failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_bulk: unsupported op "${op}". Supported ops: execute|preview`,
+            },
+          ],
+        };
+    }
+  }
+
+  if (name === "fibaro_repl") {
+    const { getLuaRepl } = await import("./repl/lua-repl.js");
+    const repl = getLuaRepl();
+
+    const op = args?.op as string;
+    if (!op) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: 'fibaro_repl: missing required parameter "op"',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    switch (op) {
+      case "execute": {
+        const code = args?.code as string | undefined;
+        if (!code) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_repl: "execute" operation requires "code" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const sessionId = args?.session_id as string | undefined;
+        const timeout = args?.timeout as number | undefined;
+        const roomId = args?.room_id as number | undefined;
+
+        const result = await repl.execute(client, code, sessionId, {
+          timeout,
+          roomId,
+        });
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Lua execution failed\n\n` +
+                  `Session: ${result.sessionId}\n` +
+                  `Execution Time: ${result.executionTime}ms\n\n` +
+                  `Error:\n${result.error || "Unknown error"}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        let text = `Lua execution successful\n\n` +
+          `Session: ${result.sessionId}\n` +
+          `Scene: ${result.sceneId}\n` +
+          `Execution Time: ${result.executionTime}ms\n`;
+
+        if (result.output) {
+          text += `\nOutput:\n${result.output}`;
+        } else {
+          text += `\nNo output captured`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "list_sessions": {
+        const sessions = repl.listSessions();
+
+        if (sessions.length === 0) {
+          return {
+            content: [{ type: "text", text: "No active REPL sessions" }],
+          };
+        }
+
+        let text = `Active REPL Sessions (${sessions.length}):\n\n`;
+
+        for (const session of sessions) {
+          const age = Date.now() - session.createdAt;
+          const inactive = Date.now() - session.lastUsed;
+
+          text +=
+            `Session: ${session.id}\n` +
+            `Scene: ${session.sceneId} (${session.sceneName})\n` +
+            `Created: ${new Date(session.createdAt).toISOString()}\n` +
+            `Age: ${Math.floor(age / 1000)}s\n` +
+            `Inactive: ${Math.floor(inactive / 1000)}s\n` +
+            `Executions: ${session.executionCount}\n` +
+            `Status: ${session.status}\n\n`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "clear_session": {
+        const sessionId = args?.session_id as string | undefined;
+        if (!sessionId) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_repl: "clear_session" operation requires "session_id" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          await repl.clearSession(client, sessionId);
+          return {
+            content: [
+              { type: "text", text: `REPL session ${sessionId} cleared successfully` },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to clear session: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "clear_all": {
+        try {
+          await repl.clearAllSessions(client);
+          return {
+            content: [{ type: "text", text: "All REPL sessions cleared successfully" }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to clear all sessions: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "sync": {
+        try {
+          await repl.sync(client);
+          return {
+            content: [
+              {
+                type: "text",
+                text: "REPL sessions synced with Fibaro successfully",
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to sync sessions: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_repl: unsupported op "${op}". Supported ops: execute|list_sessions|clear_session|clear_all|sync`,
             },
           ],
         };
