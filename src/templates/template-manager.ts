@@ -9,6 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../logger.js";
+import { formatLuaValue } from "../automation/lua-sanitizer.js";
 import { validateTemplateSchema, validateTemplateParameters } from "./template-validator.js";
 import type {
   SceneTemplate,
@@ -32,16 +33,7 @@ export class TemplateManager {
    * Get the data directory path (supports both dev and dist)
    */
   private getDataPath(): string {
-    // In development: src/templates -> data
-    // In dist: dist/templates -> data
-    const isInDist = __dirname.includes("/dist/");
-    if (isInDist) {
-      // dist/templates -> data
-      return join(__dirname, "../../data/scene-templates");
-    } else {
-      // src/templates -> data
-      return join(__dirname, "../../data/scene-templates");
-    }
+    return join(__dirname, "../../data/scene-templates");
   }
 
   /**
@@ -195,29 +187,12 @@ export class TemplateManager {
     let lua = template.lua_template;
     for (const [key, value] of Object.entries(fullParams)) {
       const placeholder = `{{${key}}}`;
-      const replacement = this.formatValue(value);
+      const replacement = formatLuaValue(value);
       // Use global regex replace for compatibility
       lua = lua.replace(new RegExp(placeholder.replace(/[{}]/g, "\\$&"), "g"), replacement);
     }
 
     return { lua, validation: { valid: true, errors: [] } };
-  }
-
-  /**
-   * Format a value for Lua code
-   */
-  private formatValue(value: any): string {
-    if (typeof value === "string") {
-      // Escape quotes and backslashes
-      const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      return `"${escaped}"`;
-    } else if (typeof value === "boolean") {
-      return value ? "true" : "false";
-    } else if (typeof value === "number") {
-      return value.toString();
-    } else {
-      return JSON.stringify(value);
-    }
   }
 
   /**

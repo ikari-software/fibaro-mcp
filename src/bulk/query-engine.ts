@@ -186,19 +186,28 @@ export class QueryEngine {
     expectedValue: any,
     operator: string
   ): boolean {
+    // Coerce both sides to numbers when possible for consistent comparison
+    // (Fibaro API may return "23.5" for a numeric property)
+    const a = typeof actualValue === "string" && !isNaN(Number(actualValue))
+      ? Number(actualValue)
+      : actualValue;
+    const b = typeof expectedValue === "string" && !isNaN(Number(expectedValue))
+      ? Number(expectedValue)
+      : expectedValue;
+
     switch (operator) {
       case "==":
-        return actualValue == expectedValue;
+        return a === b || String(a) === String(b);
       case "!=":
-        return actualValue != expectedValue;
+        return a !== b && String(a) !== String(b);
       case ">":
-        return actualValue > expectedValue;
+        return a > b;
       case "<":
-        return actualValue < expectedValue;
+        return a < b;
       case ">=":
-        return actualValue >= expectedValue;
+        return a >= b;
       case "<=":
-        return actualValue <= expectedValue;
+        return a <= b;
       default:
         return false;
     }

@@ -18,7 +18,7 @@ describe("BackupManager", () => {
   beforeEach(() => {
     manager = new BackupManager();
     mockClient = {
-      getInfo: vi.fn(),
+      getSystemInfo: vi.fn(),
       getDevices: vi.fn(),
       getScenes: vi.fn(),
       getRooms: vi.fn(),
@@ -42,7 +42,7 @@ describe("BackupManager", () => {
 
   describe("exportSystem", () => {
     it("should export all system data by default", async () => {
-      mockClient.getInfo.mockResolvedValue({ serial_number: "123456" });
+      mockClient.getSystemInfo.mockResolvedValue({ serial_number: "123456" });
       mockClient.getDevices.mockResolvedValue([{ id: 1, name: "Device 1" }]);
       mockClient.getScenes.mockResolvedValue([{ id: 1, name: "Scene 1" }]);
       mockClient.getRooms.mockResolvedValue([{ id: 1, name: "Room 1" }]);
@@ -69,7 +69,7 @@ describe("BackupManager", () => {
     });
 
     it("should exclude users by default", async () => {
-      mockClient.getInfo.mockResolvedValue({});
+      mockClient.getSystemInfo.mockResolvedValue({});
       mockClient.getDevices.mockResolvedValue([]);
       mockClient.getScenes.mockResolvedValue([]);
       mockClient.getRooms.mockResolvedValue([]);
@@ -85,7 +85,7 @@ describe("BackupManager", () => {
     });
 
     it("should respect include parameter", async () => {
-      mockClient.getInfo.mockResolvedValue({});
+      mockClient.getSystemInfo.mockResolvedValue({});
       mockClient.getDevices.mockResolvedValue([{ id: 1, name: "Device 1" }]);
       mockClient.getRooms.mockResolvedValue([{ id: 1, name: "Room 1" }]);
 
@@ -102,7 +102,7 @@ describe("BackupManager", () => {
     });
 
     it("should respect exclude parameter", async () => {
-      mockClient.getInfo.mockResolvedValue({});
+      mockClient.getSystemInfo.mockResolvedValue({});
       mockClient.getDevices.mockResolvedValue([]);
       mockClient.getScenes.mockResolvedValue([]);
       mockClient.getRooms.mockResolvedValue([]);
@@ -122,7 +122,7 @@ describe("BackupManager", () => {
     });
 
     it("should remove passwords when include_passwords is false", async () => {
-      mockClient.getInfo.mockResolvedValue({});
+      mockClient.getSystemInfo.mockResolvedValue({});
       mockClient.getDevices.mockResolvedValue([]);
       mockClient.getScenes.mockResolvedValue([]);
       mockClient.getRooms.mockResolvedValue([]);
@@ -144,7 +144,7 @@ describe("BackupManager", () => {
     });
 
     it("should handle API errors gracefully", async () => {
-      mockClient.getInfo.mockResolvedValue({});
+      mockClient.getSystemInfo.mockResolvedValue({});
       mockClient.getDevices.mockRejectedValue(new Error("API Error"));
       mockClient.getScenes.mockResolvedValue([]);
       mockClient.getRooms.mockResolvedValue([]);

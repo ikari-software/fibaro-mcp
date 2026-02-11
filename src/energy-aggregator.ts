@@ -272,8 +272,8 @@ export function aggregateAverage(points: RawDataPoint[]): AggregatedDataPoint {
   return {
     timestamp: points[0].timestamp,
     avg: sum / values.length,
-    min: Math.min(...values),
-    max: Math.max(...values),
+    min: values.reduce((a, b) => (a < b ? a : b)),
+    max: values.reduce((a, b) => (a > b ? a : b)),
     count: points.length,
   };
 }
@@ -299,8 +299,8 @@ export function aggregateEnergy(points: RawDataPoint[]): AggregatedDataPoint {
   return {
     timestamp: sorted[0].timestamp,
     avg: values.reduce((a, b) => a + b, 0) / values.length,
-    min: Math.min(...values),
-    max: Math.max(...values),
+    min: values.reduce((a, b) => (a < b ? a : b)),
+    max: values.reduce((a, b) => (a > b ? a : b)),
     count: points.length,
     sum: delta >= 0 ? delta : 0, // Handle counter resets
   };

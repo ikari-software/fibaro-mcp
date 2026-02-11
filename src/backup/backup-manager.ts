@@ -16,6 +16,9 @@ import type {
 } from "./backup-types.js";
 
 export class BackupManager {
+  // Per-import cache to avoid redundant API calls in finder methods
+  private importCache: Map<string, any[]> | null = null;
+
   /**
    * Export Fibaro system data
    */
@@ -126,6 +129,9 @@ export class BackupManager {
       "users",
     ];
 
+    // Initialize per-import cache to avoid repeated API calls in findXByName
+    this.importCache = new Map();
+
     try {
       // Import rooms first (devices depend on rooms)
       if (importTypes.includes("rooms") && exportData.rooms) {
@@ -168,6 +174,9 @@ export class BackupManager {
         error: `Import failed: ${error instanceof Error ? error.message : String(error)}`,
       });
       logger.error("System import failed", error);
+    } finally {
+      // Clear per-import cache
+      this.importCache = null;
     }
 
     result.duration_ms = Date.now() - startTime;
@@ -208,7 +217,7 @@ export class BackupManager {
 
   private async fetchSystemInfo(client: any): Promise<any> {
     try {
-      return await client.getInfo();
+      return await client.getSystemInfo();
     } catch (error) {
       logger.warn("Failed to fetch system info", error);
       return {};
@@ -551,11 +560,21 @@ export class BackupManager {
     }
   }
 
-  // Finder helper methods
+  // Finder helper methods (use importCache when available to avoid repeated API calls)
+
+  private async getCachedList(client: any, key: string, fetcher: () => Promise<any[]>): Promise<any[]> {
+    if (this.importCache) {
+      if (!this.importCache.has(key)) {
+        this.importCache.set(key, await fetcher());
+      }
+      return this.importCache.get(key)!;
+    }
+    return fetcher();
+  }
 
   private async findRoomByName(client: any, name: string): Promise<any | null> {
     try {
-      const rooms = await client.getRooms();
+      const rooms = await this.getCachedList(client, "rooms", () => client.getRooms());
       return rooms.find((r: any) => r.name === name) || null;
     } catch {
       return null;
@@ -564,7 +583,7 @@ export class BackupManager {
 
   private async findSectionByName(client: any, name: string): Promise<any | null> {
     try {
-      const sections = await client.getSections();
+      const sections = await this.getCachedList(client, "sections", () => client.getSections());
       return sections.find((s: any) => s.name === name) || null;
     } catch {
       return null;
@@ -581,7 +600,7 @@ export class BackupManager {
 
   private async findVariableByName(client: any, name: string): Promise<any | null> {
     try {
-      const variables = await client.getGlobalVariables();
+      const variables = await this.getCachedList(client, "variables", () => client.getGlobalVariables());
       return variables.find((v: any) => v.name === name) || null;
     } catch {
       return null;
@@ -590,7 +609,7 @@ export class BackupManager {
 
   private async findSceneByName(client: any, name: string): Promise<any | null> {
     try {
-      const scenes = await client.getScenes();
+      const scenes = await this.getCachedList(client, "scenes", () => client.getScenes());
       return scenes.find((s: any) => s.name === name) || null;
     } catch {
       return null;
@@ -599,7 +618,7 @@ export class BackupManager {
 
   private async findUserByName(client: any, username: string): Promise<any | null> {
     try {
-      const users = await client.getUsers();
+      const users = await this.getCachedList(client, "users", () => client.getUsers());
       return users.find((u: any) => u.username === username) || null;
     } catch {
       return null;

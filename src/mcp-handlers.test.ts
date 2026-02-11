@@ -225,7 +225,8 @@ describe("mcp-handlers", () => {
 
     for (const r of resources) {
       const out = await handleResourceRead(client, r.uri);
-      expect(out.contents[0].mimeType).toBe("application/json");
+      // Each resource should match its declared mimeType
+      expect(out.contents[0].mimeType).toBe(r.mimeType);
       expect(typeof (out.contents[0] as any).text).toBe("string");
     }
   });
@@ -885,6 +886,9 @@ describe("mcp-handlers", () => {
       if (tool.name === "get_device_lua") {
         args = { device_id: 1 };
       }
+      if (tool.name === "fibaro_energy_graph") {
+        args = { from: 1767943794, to: 1767947394, device_id: 955 };
+      }
 
       const out = await handleToolCall(client, tool.name, args);
       expect(out.content.length).toBeGreaterThan(0);
@@ -1186,6 +1190,101 @@ describe("mcp-handlers", () => {
       expect(parsed.aggregation.interval_seconds).toBeDefined();
       expect(parsed.aggregation.total_points).toBeDefined();
       expect(parsed.aggregation.raw_points_count).toBeDefined();
+    });
+  });
+
+  describe("fibaro_energy_graph", () => {
+    it("fetches device power history", async () => {
+      const mockData = {
+        data: [
+          { timestamp: 1767943794, value: 150.5 },
+          { timestamp: 1767944394, value: 145.2 },
+        ],
+      };
+      const getEnergyHistory = vi.fn().mockResolvedValue(mockData);
+      const client = makeClient({ getEnergyHistory });
+
+      const result = await handleToolCall(client, "fibaro_energy_graph", {
+        from: 1767943794,
+        to: 1767947394,
+        device_id: 955,
+      });
+
+      expect(getEnergyHistory).toHaveBeenCalledWith({
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "devices",
+        property: "power",
+        id: 955,
+      });
+      const text = (result.content[0] as any).text;
+      const parsed = JSON.parse(text);
+      expect(parsed.data).toHaveLength(2);
+    });
+
+    it("fetches room power history", async () => {
+      const mockData = { data: [{ timestamp: 1767943794, value: 500 }] };
+      const getEnergyHistory = vi.fn().mockResolvedValue(mockData);
+      const client = makeClient({ getEnergyHistory });
+
+      const result = await handleToolCall(client, "fibaro_energy_graph", {
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "rooms",
+        room_id: 226,
+      });
+
+      expect(getEnergyHistory).toHaveBeenCalledWith({
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "rooms",
+        property: "power",
+        id: 226,
+      });
+    });
+
+    it("fetches energy instead of power", async () => {
+      const getEnergyHistory = vi.fn().mockResolvedValue({ data: [] });
+      const client = makeClient({ getEnergyHistory });
+
+      await handleToolCall(client, "fibaro_energy_graph", {
+        from: 1767943794,
+        to: 1767947394,
+        property: "energy",
+        device_id: 955,
+      });
+
+      expect(getEnergyHistory).toHaveBeenCalledWith({
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "devices",
+        property: "energy",
+        id: 955,
+      });
+    });
+
+    it("throws error if device_id missing for grouping=devices", async () => {
+      const client = makeClient({});
+
+      await expect(
+        handleToolCall(client, "fibaro_energy_graph", {
+          from: 1767943794,
+          to: 1767947394,
+          grouping: "devices",
+        }),
+      ).rejects.toThrow('device_id is required when grouping="devices"');
+    });
+
+    it("throws error if room_id missing for grouping=rooms", async () => {
+      const client = makeClient({});
+
+      await expect(
+        handleToolCall(client, "fibaro_energy_graph", {
+          from: 1767943794,
+          to: 1767947394,
+          grouping: "rooms",
+        }),
+      ).rejects.toThrow('room_id is required when grouping="rooms"');
     });
   });
 });

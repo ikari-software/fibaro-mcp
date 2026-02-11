@@ -13,7 +13,6 @@ import type {
   BulkAction,
   BulkOperationOptions,
   DeviceOperationResult,
-  RollbackEntry,
 } from "./bulk-types.js";
 
 export class BulkOperationsManager {

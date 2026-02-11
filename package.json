@@ -56,10 +56,18 @@
     "zod": "^3.23.8"
   },
   "peerDependencies": {
-    "js-yaml": "^4.1.0"
+    "express": "^4.18.0 || ^5.0.0",
+    "js-yaml": "^4.1.0",
+    "mqtt": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    },
     "js-yaml": {
+      "optional": true
+    },
+    "mqtt": {
       "optional": true
     }
   },

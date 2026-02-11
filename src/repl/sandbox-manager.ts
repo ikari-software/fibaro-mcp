@@ -5,6 +5,7 @@
  * Licensed under the MIT License
  */
 
+import { randomUUID } from "node:crypto";
 import { logger } from "../logger.js";
 import type {
   ReplSession,
@@ -277,9 +278,7 @@ export class SandboxManager {
   // Private helper methods
 
   private generateSessionId(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 9);
-    return `${timestamp}_${random}`;
+    return randomUUID();
   }
 }
 

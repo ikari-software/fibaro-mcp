@@ -5,6 +5,7 @@
  * Licensed under the MIT License
  */
 
+import { timingSafeEqual } from "node:crypto";
 import { logger } from "../logger.js";
 import type { IWebhookServer, WebhookConfig, WebhookRoute } from "./integration-types.js";
 
@@ -52,11 +53,11 @@ export class WebhookServer implements IWebhookServer {
       await new Promise<void>((resolve, reject) => {
         this.server = this.app.listen(
           this.config.port,
-          this.config.host || "0.0.0.0",
+          this.config.host || "127.0.0.1",
           () => {
             this.running = true;
             logger.info(
-              `Webhook server started on ${this.config.host || "0.0.0.0"}:${this.config.port}`
+              `Webhook server started on ${this.config.host || "127.0.0.1"}:${this.config.port}`
             );
             resolve();
           }
@@ -161,8 +162,12 @@ export class WebhookServer implements IWebhookServer {
     // Authentication middleware
     if (this.config.authToken) {
       this.app.use((req: any, res: any, next: any) => {
-        const token = req.headers.authorization?.replace("Bearer ", "");
-        if (token !== this.config.authToken) {
+        const token = req.headers.authorization?.replace("Bearer ", "") || "";
+        const expected = this.config.authToken!;
+        // Use constant-time comparison to prevent timing attacks
+        const tokenBuf = Buffer.from(token);
+        const expectedBuf = Buffer.from(expected);
+        if (tokenBuf.length !== expectedBuf.length || !timingSafeEqual(tokenBuf, expectedBuf)) {
           return res.status(401).json({ error: "Unauthorized" });
         }
         next();

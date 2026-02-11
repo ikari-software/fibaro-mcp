@@ -6,6 +6,11 @@
  */
 
 import { logger } from "../logger.js";
+import {
+  escapeLuaString,
+  formatLuaValue,
+  validateIdentifier,
+} from "./lua-sanitizer.js";
 import type { Condition, ConditionGroup, ValidationResult } from "./automation-types.js";
 
 export class ConditionBuilder {
@@ -38,9 +43,12 @@ export class ConditionBuilder {
           throw new Error("device_state condition requires deviceId and property");
         }
 
+        // Validate property name to prevent Lua injection
+        validateIdentifier(condition.property, "device property");
+
         // Use fibaro.getValue() for device properties
-        const getValue = `fibaro.getValue(${condition.deviceId}, "${condition.property}")`;
-        const value = this.formatValue(condition.value);
+        const getValue = `fibaro.getValue(${condition.deviceId}, "${escapeLuaString(condition.property)}")`;
+        const value = formatLuaValue(condition.value);
 
         return `${getValue} ${condition.operator} ${value}`;
       }
@@ -50,9 +58,12 @@ export class ConditionBuilder {
           throw new Error("variable condition requires variableName");
         }
 
+        // Validate variable name to prevent Lua injection
+        validateIdentifier(condition.variableName, "variable name");
+
         // Use fibaro.getGlobalVariable() for global variables
-        const getValue = `fibaro.getGlobalVariable("${condition.variableName}")`;
-        const value = this.formatValue(condition.value);
+        const getValue = `fibaro.getGlobalVariable("${escapeLuaString(condition.variableName)}")`;
+        const value = formatLuaValue(condition.value);
 
         // Global variables are strings, so handle type conversion
         if (typeof condition.value === "number") {
@@ -66,7 +77,7 @@ export class ConditionBuilder {
 
       case "time": {
         // Time-based conditions using os.time() and os.date()
-        const value = this.formatValue(condition.value);
+        const value = formatLuaValue(condition.value);
         return `os.time() ${condition.operator} ${value}`;
       }
 
@@ -217,22 +228,14 @@ export class ConditionBuilder {
     return obj && obj.operator && Array.isArray(obj.conditions);
   }
 
-  private formatValue(value: any): string {
-    if (typeof value === "string") {
-      return `"${value.replace(/"/g, '\\"')}"`;
-    } else if (typeof value === "boolean") {
-      return value ? "true" : "false";
-    } else if (typeof value === "number") {
-      return String(value);
-    } else if (value === null || value === undefined) {
-      return "nil";
-    } else {
-      // Objects/arrays - convert to JSON string
-      return `"${JSON.stringify(value).replace(/"/g, '\\"')}"`;
-    }
-  }
 }
 
+// Singleton instance
+let conditionBuilder: ConditionBuilder | null = null;
+
 export function getConditionBuilder(): ConditionBuilder {
-  return new ConditionBuilder();
+  if (!conditionBuilder) {
+    conditionBuilder = new ConditionBuilder();
+  }
+  return conditionBuilder;
 }

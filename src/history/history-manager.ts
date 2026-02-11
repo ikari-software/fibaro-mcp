@@ -131,8 +131,8 @@ export class HistoryManager {
 
     // Calculate numeric statistics if we have numeric values
     if (values.length > 0) {
-      stats.min = Math.min(...values);
-      stats.max = Math.max(...values);
+      stats.min = values.reduce((a, b) => (a < b ? a : b));
+      stats.max = values.reduce((a, b) => (a > b ? a : b));
       stats.avg = values.reduce((a, b) => a + b, 0) / values.length;
       stats.sum = values.reduce((a, b) => a + b, 0);
     }
@@ -186,8 +186,8 @@ export class HistoryManager {
       };
 
       if (aggregation === "avg" || aggregation === "last") {
-        entry.min = Math.min(...numericValues);
-        entry.max = Math.max(...numericValues);
+        entry.min = numericValues.reduce((a, b) => (a < b ? a : b));
+        entry.max = numericValues.reduce((a, b) => (a > b ? a : b));
         entry.avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
       }
 
@@ -341,8 +341,8 @@ export class HistoryManager {
       successRate:
         executions.length > 0 ? (successfulExecutions.length / executions.length) * 100 : 0,
       avgDuration: durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0,
-      minDuration: durations.length > 0 ? Math.min(...durations) : 0,
-      maxDuration: durations.length > 0 ? Math.max(...durations) : 0,
+      minDuration: durations.length > 0 ? durations.reduce((a, b) => (a < b ? a : b)) : 0,
+      maxDuration: durations.length > 0 ? durations.reduce((a, b) => (a > b ? a : b)) : 0,
       lastExecution: executions[0].startTime,
       lastStatus: executions[0].status !== "running" ? executions[0].status : undefined,
     };
@@ -475,9 +475,9 @@ export class HistoryManager {
       case "avg":
         return values.reduce((a, b) => a + b, 0) / values.length;
       case "min":
-        return Math.min(...values);
+        return values.reduce((a, b) => (a < b ? a : b));
       case "max":
-        return Math.max(...values);
+        return values.reduce((a, b) => (a > b ? a : b));
       case "sum":
         return values.reduce((a, b) => a + b, 0);
       case "count":

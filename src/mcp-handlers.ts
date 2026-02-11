@@ -107,10 +107,25 @@ export type FibaroClientLike = {
   stopZWaveExclusion: () => Promise<void>;
   removeFailedZWaveNode: (nodeId: number) => Promise<void>;
   healZWaveNetwork: () => Promise<void>;
+  getEnergyHistory: (params: {
+    from: number;
+    to: number;
+    grouping: "devices" | "rooms";
+    property: "power" | "energy";
+    id: number;
+  }) => Promise<any>;
 };
+
+// Cache getTools() result — toolset is determined by env var, stable at runtime
+let cachedTools: ListToolsResult | null = null;
+let cachedToolset: string | null = null;
 
 export function getTools(): ListToolsResult {
   const toolset = (process.env.FIBARO_TOOLSET || "intent").toLowerCase();
+
+  if (cachedTools && cachedToolset === toolset) {
+    return cachedTools;
+  }
 
   const withFormat = (tools: any[]) => {
     return tools.map((t) => {
@@ -183,7 +198,7 @@ export function getTools(): ListToolsResult {
       {
         name: "fibaro_device",
         description:
-          "Device intent tool: list/get/control devices and perform common actions (turn on/off, set brightness/color/temperature, call arbitrary action, read Quick App Lua).",
+          "Device management: list/get/control devices. IMPORTANT: Avoid 'op=list' without filters - it returns 1MB+ of data. Instead: use 'op=get' with 'name' parameter for specific devices, or filter with room_id/type/interface. Supports: turn_on, turn_off, set_brightness, set_color, set_temperature, action, get_lua.",
         inputSchema: {
           type: "object",
           properties: {
@@ -246,7 +261,7 @@ export function getTools(): ListToolsResult {
       {
         name: "fibaro_scene",
         description:
-          "Scene intent tool: list/get/run/stop scenes and manage Lua scenes (create, update Lua, get Lua, delete).",
+          "Scene management: list/get/run/stop scenes and Lua code. IMPORTANT: Avoid 'op=list' without filters - use 'op=get' with 'name' or 'id' for specific scenes, or filter by room_id. Supports: run, stop, create, update_lua, get_lua, delete.",
         inputSchema: {
           type: "object",
           properties: {
@@ -323,7 +338,7 @@ export function getTools(): ListToolsResult {
       {
         name: "fibaro_home",
         description:
-          "Home/system intent tool: rooms/sections/users/profiles/notifications/alarms/zwave/backups/settings/weather/system info/custom events/plugins.",
+          "Home/system management: rooms, sections, users, weather, energy_graph, energy_panel, system_info. For quick stats use 'op=device_stats'. For current power consumption use 'op=energy_panel'. For historical energy/power data use 'op=energy_graph'. Supports: rooms, sections, users, profiles, notifications, alarms, zwave, backups, settings, weather, system_info, energy_graph, energy_panel, plugins.",
         inputSchema: {
           type: "object",
           properties: {
@@ -334,7 +349,7 @@ export function getTools(): ListToolsResult {
             op: {
               type: "string",
               description:
-                "Operation: system_info|weather|energy_panel|rooms|sections|create_room|update_room|delete_room|create_section|update_section|delete_section|users|create_user|update_user|delete_user|profiles|get_active_profile|set_active_profile|notifications|send_notification|alarms|arm_alarm|disarm_alarm|zwave_network|start_zwave_inclusion|stop_zwave_inclusion|start_zwave_exclusion|stop_zwave_exclusion|remove_failed_zwave_node|heal_zwave_network|create_backup|list_backups|restore_backup|get_settings|update_settings|restart_system|get_event_log|geofences|create_geofence|update_geofence|delete_geofence|plugins|install_plugin|uninstall_plugin|restart_plugin|trigger_custom_event|device_stats",
+                "Operation: system_info|weather|energy_graph|energy_panel|rooms|sections|create_room|update_room|delete_room|create_section|update_section|delete_section|users|create_user|update_user|delete_user|profiles|get_active_profile|set_active_profile|notifications|send_notification|alarms|arm_alarm|disarm_alarm|zwave_network|start_zwave_inclusion|stop_zwave_inclusion|start_zwave_exclusion|stop_zwave_exclusion|remove_failed_zwave_node|heal_zwave_network|create_backup|list_backups|restore_backup|get_settings|update_settings|restart_system|get_event_log|geofences|create_geofence|update_geofence|delete_geofence|plugins|install_plugin|uninstall_plugin|restart_plugin|trigger_custom_event|device_stats|energy_graph|energy_panel",
             },
             room_id: { type: "number" },
             section_id: { type: "number" },
@@ -382,6 +397,11 @@ export function getTools(): ListToolsResult {
               description: "For device_stats: metrics to include",
             },
             property: { type: "string", description: "For device_stats: legacy property filter" },
+            grouping: {
+              type: "string",
+              enum: ["devices", "rooms"],
+              description: "For energy_graph: group by devices or rooms (default: devices)",
+            },
           },
           required: ["op"],
         },
@@ -1468,6 +1488,43 @@ export function getTools(): ListToolsResult {
         },
       },
       {
+        name: "fibaro_energy_graph",
+        description:
+          "Get historical energy/power data from Fibaro HC2 summary-graph API. Works for both devices and rooms. Returns time-series data aggregated by the HC2.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            from: {
+              type: "number",
+              description: "Start timestamp (Unix seconds)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp (Unix seconds)",
+            },
+            grouping: {
+              type: "string",
+              enum: ["devices", "rooms"],
+              description: "Group by devices or rooms (default: devices)",
+            },
+            property: {
+              type: "string",
+              enum: ["power", "energy"],
+              description: "Property to query (default: power)",
+            },
+            device_id: {
+              type: "number",
+              description: "Device ID (required if grouping=devices)",
+            },
+            room_id: {
+              type: "number",
+              description: "Room ID (required if grouping=rooms)",
+            },
+          },
+          required: ["from", "to"],
+        },
+      },
+      {
         name: "create_global_variable",
         description: "Create a global variable",
         inputSchema: {
@@ -1946,7 +2003,7 @@ export function getTools(): ListToolsResult {
       {
         name: "fibaro_analytics",
         description:
-          "Analytics and insights: device usage patterns, energy trends, scene frequency, system health, dashboard generation",
+          "Analytics and insights - USE THIS FOR OVERVIEWS instead of listing all devices/scenes. Operations: dashboard (comprehensive overview), system_health (quick health check), device_usage, energy_trends, scene_frequency, hourly_distribution, room_activity.",
         inputSchema: {
           type: "object",
           properties: {
@@ -2106,15 +2163,34 @@ export function getTools(): ListToolsResult {
     ],
   };
 
+  // v3 tools that should be available in all toolsets
+  const v3ToolNames = new Set([
+    "fibaro_analytics",
+    "fibaro_history",
+    "fibaro_scene_history",
+    "fibaro_backup",
+    "fibaro_bulk",
+    "fibaro_template",
+    "fibaro_automation",
+    "fibaro_repl",
+    "fibaro_integration",
+  ]);
+  const v3Tools = legacy.tools.filter((t) => v3ToolNames.has(t.name));
+
+  let result: ListToolsResult;
+
   if (toolset === "legacy") {
-    return { tools: withFormat(legacy.tools) };
+    result = { tools: withFormat(legacy.tools) };
+  } else if (toolset === "both") {
+    result = { tools: withFormat([...intentTools.tools, ...legacy.tools]) };
+  } else {
+    // Default: intent toolset + v3 tools
+    result = { tools: withFormat([...intentTools.tools, ...v3Tools]) };
   }
 
-  if (toolset === "both") {
-    return { tools: withFormat([...intentTools.tools, ...legacy.tools]) };
-  }
-
-  return { tools: withFormat(legacy.tools) };
+  cachedTools = result;
+  cachedToolset = toolset;
+  return result;
 }
 
 export function handleFirstRun(args: any): CallToolResult {
@@ -2171,10 +2247,16 @@ export function getResources(): ListResourcesResult {
   return {
     resources: [
       {
+        uri: "fibaro://help",
+        mimeType: "text/plain",
+        name: "Usage Guide",
+        description: "READ THIS FIRST: Efficient tool usage guide to avoid large data transfers",
+      },
+      {
         uri: "fibaro://devices",
         mimeType: "application/json",
         name: "Devices",
-        description: "List of all devices in the system",
+        description: "List of all devices in the system (WARNING: 1MB+ - prefer fibaro_device with filters)",
       },
       {
         uri: "fibaro://rooms",
@@ -2186,7 +2268,7 @@ export function getResources(): ListResourcesResult {
         uri: "fibaro://scenes",
         mimeType: "application/json",
         name: "Scenes",
-        description: "List of all scenes in the system",
+        description: "List of all scenes in the system (WARNING: large - prefer fibaro_scene with filters)",
       },
       {
         uri: "fibaro://system",
@@ -2217,6 +2299,69 @@ export async function handleResourceRead(
   let data: any;
 
   switch (uri) {
+    case "fibaro://help": {
+      const helpText = `# Fibaro MCP - Efficient Usage Guide
+
+## IMPORTANT: Avoid Large Data Transfers
+
+Do NOT start by listing all devices or scenes - these can be 1MB+ and waste context.
+
+## Quick Reference
+
+### For System Overview
+- fibaro_analytics op=dashboard       → Comprehensive overview
+- fibaro_analytics op=system_health   → Quick health check
+- fibaro_home op=energy_panel         → Current power consumption
+
+### For Specific Devices
+- fibaro_device op=get name="Kitchen Light"    → Get by name
+- fibaro_device op=list room_id=5              → Filter by room
+- fibaro_device op=control name="Lamp" action=turnOn
+
+### For Specific Scenes
+- fibaro_scene op=get name="Good Night"        → Get by name
+- fibaro_scene op=run name="Morning Routine"   → Run by name
+
+### For Energy/Power Data
+- fibaro_home op=energy_panel                  → Current consumption
+- fibaro_analytics op=energy_trends days=7     → Trends by room
+- get_device_stats device_id=42                → Device power history
+
+### For Variables
+- fibaro_variable op=get name=HomeMode
+- fibaro_variable op=set name=HomeMode value=away
+
+## Tool Summary
+
+| Tool | Best For |
+|------|----------|
+| fibaro_analytics | System overviews, health checks, trends |
+| fibaro_device | Control specific devices (use name param) |
+| fibaro_scene | Run/manage specific scenes (use name param) |
+| fibaro_home | System info, weather, energy panel |
+| fibaro_variable | Global variables |
+| fibaro_bulk | Bulk operations on multiple devices |
+| fibaro_template | Scene templates |
+| fibaro_automation | Create automations |
+
+## What NOT To Do
+
+- fibaro://devices           → 1MB+ of data
+- fibaro_device op=list      → Without filters = huge response
+- fibaro_scene op=list       → Without filters = large response
+
+Always use name-based lookups or filters!`;
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/plain",
+            text: helpText,
+          },
+        ],
+      };
+    }
     case "fibaro://devices": {
       data = await client.getDevices();
       break;
@@ -2290,25 +2435,28 @@ async function handleToolCallInternal(
       case "list":
         return handleToolCall(client, "list_devices", args);
       case "get":
-        return handleToolCall(client, "get_device", { device_id: args?.device_id });
+        return handleToolCall(client, "get_device", { device_id: args?.device_id, name: args?.name });
       case "action":
         return handleToolCall(client, "control_device", {
           device_id: args?.device_id,
+          name: args?.name,
           action: args?.action,
           args: args?.args,
         });
       case "turn_on":
-        return handleToolCall(client, "turn_on", { device_id: args?.device_id });
+        return handleToolCall(client, "turn_on", { device_id: args?.device_id, name: args?.name });
       case "turn_off":
-        return handleToolCall(client, "turn_off", { device_id: args?.device_id });
+        return handleToolCall(client, "turn_off", { device_id: args?.device_id, name: args?.name });
       case "set_brightness":
         return handleToolCall(client, "set_brightness", {
           device_id: args?.device_id,
+          name: args?.name,
           level: args?.level,
         });
       case "set_color":
         return handleToolCall(client, "set_color", {
           device_id: args?.device_id,
+          name: args?.name,
           r: args?.r,
           g: args?.g,
           b: args?.b,
@@ -2317,12 +2465,13 @@ async function handleToolCallInternal(
       case "set_temperature":
         return handleToolCall(client, "set_temperature", {
           device_id: args?.device_id,
+          name: args?.name,
           temperature: args?.temperature,
         });
       case "delete":
-        return handleToolCall(client, "delete_device", { device_id: args?.device_id });
+        return handleToolCall(client, "delete_device", { device_id: args?.device_id, name: args?.name });
       case "get_lua":
-        return handleToolCall(client, "get_device_lua", { device_id: args?.device_id });
+        return handleToolCall(client, "get_device_lua", { device_id: args?.device_id, name: args?.name });
       default:
         return {
           content: [
@@ -2344,11 +2493,11 @@ async function handleToolCallInternal(
       case "list":
         return handleToolCall(client, "list_scenes", { room_id: args?.room_id });
       case "get":
-        return handleToolCall(client, "get_scene", { scene_id: args?.scene_id });
+        return handleToolCall(client, "get_scene", { scene_id: args?.scene_id, name: args?.name });
       case "run":
-        return handleToolCall(client, "run_scene", { scene_id: args?.scene_id });
+        return handleToolCall(client, "run_scene", { scene_id: args?.scene_id, name: args?.name });
       case "stop":
-        return handleToolCall(client, "stop_scene", { scene_id: args?.scene_id });
+        return handleToolCall(client, "stop_scene", { scene_id: args?.scene_id, name: args?.name });
       case "get_lua":
         return handleToolCall(client, "get_scene_lua", { scene_id: args?.scene_id });
       case "create":
@@ -2619,12 +2768,22 @@ async function handleToolCallInternal(
           metrics: args?.metrics ?? params.metrics,
         });
       }
+      case "energy_graph": {
+        return handleToolCall(client, "fibaro_energy_graph", {
+          from: args?.from,
+          to: args?.to,
+          grouping: args?.grouping,
+          property: args?.property,
+          device_id: args?.device_id,
+          room_id: args?.room_id,
+        });
+      }
       default:
         return {
           content: [
             {
               type: "text",
-              text: `fibaro_home: unsupported op "${op}". Supported ops include: system_info|weather|energy_panel|rooms|sections|...|device_stats`,
+              text: `fibaro_home: unsupported op "${op}". Supported ops include: system_info|weather|energy_graph|rooms|sections|...|device_stats`,
             },
           ],
         };
@@ -5344,6 +5503,47 @@ async function handleToolCallInternal(
 
       return {
         content: [{ type: "text", text: JSON.stringify(formattedStats, null, 2) }],
+      };
+    }
+
+    case "fibaro_energy_graph": {
+      const from = args?.from as number;
+      const to = args?.to as number;
+      const grouping = (args?.grouping as "devices" | "rooms") || "devices";
+      const property = (args?.property as "power" | "energy") || "power";
+      const deviceId = args?.device_id as number | undefined;
+      const roomId = args?.room_id as number | undefined;
+
+      // Determine ID based on grouping
+      let id: number;
+      if (grouping === "devices") {
+        if (deviceId === undefined) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_energy_graph: device_id is required when grouping="devices"',
+          );
+        }
+        id = deviceId;
+      } else {
+        if (roomId === undefined) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_energy_graph: room_id is required when grouping="rooms"',
+          );
+        }
+        id = roomId;
+      }
+
+      const data = await client.getEnergyHistory({
+        from,
+        to,
+        grouping,
+        property,
+        id,
+      });
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
       };
     }
 

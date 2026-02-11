@@ -78,7 +78,7 @@ export class AnalyticsEngine {
         const hour = new Date(event.timestamp || event.created).getHours();
         hourCounts[hour]++;
       }
-      const maxCount = Math.max(...hourCounts);
+      const maxCount = hourCounts.reduce((a, b) => (a > b ? a : b));
       const peakHours = hourCounts
         .map((count, hour) => ({ hour, count }))
         .filter((h) => h.count >= maxCount * 0.8)
@@ -88,7 +88,7 @@ export class AnalyticsEngine {
       // Find last active time
       const lastActive =
         deviceEvents.length > 0
-          ? Math.max(...deviceEvents.map((e: any) => e.timestamp || e.created))
+          ? deviceEvents.reduce((max: number, e: any) => { const t = e.timestamp || e.created; return t > max ? t : max; }, 0)
           : 0;
 
       patterns.push({
@@ -114,17 +114,19 @@ export class AnalyticsEngine {
   }
 
   /**
-   * Analyze energy consumption trends
+   * Analyze energy consumption trends.
+   *
+   * NOTE: The Fibaro HC2 API provides current device readings (power/energy)
+   * but does not expose per-interval historical energy data through the event log.
+   * This method returns a single snapshot of current consumption broken down
+   * by room and device type. For true historical energy data, use
+   * fibaro_home op=energy_graph which queries the HC2 summary-graph API.
    */
   async analyzeEnergyTrends(
     client: any,
     options: AnalyticsOptions = {}
   ): Promise<EnergyTrend[]> {
-    const from = options.from || Date.now() - 7 * 24 * 3600000;
-    const to = options.to || Date.now();
-    const groupBy = options.group_by || "day";
-
-    logger.debug("Analyzing energy trends", { from, to, groupBy });
+    logger.debug("Analyzing energy consumption snapshot");
 
     // Get devices with power consumption
     const devices = await client.getDevices();
@@ -133,60 +135,47 @@ export class AnalyticsEngine {
         d.properties?.power !== undefined || d.properties?.energy !== undefined
     );
 
-    // Get rooms for grouping
-    const rooms = await client.getRooms();
-    const roomMap = new Map(rooms.map((r: any) => [r.id, r.name]));
+    const trend: EnergyTrend = {
+      timestamp: Date.now(),
+      totalConsumption: 0,
+      byRoom: {},
+      byDeviceType: {},
+      devices: [],
+    };
 
-    // Calculate interval size
-    const intervalMs = this.getIntervalMs(groupBy);
-    const intervals: EnergyTrend[] = [];
+    for (const device of powerDevices) {
+      const power = Number(device.properties?.power) || 0;
+      const energy = Number(device.properties?.energy) || 0;
+      // Prefer energy (cumulative kWh) if available, otherwise use power (W)
+      const consumption = energy || power;
 
-    for (let time = from; time < to; time += intervalMs) {
-      const intervalEnd = Math.min(time + intervalMs, to);
+      if (consumption > 0) {
+        trend.totalConsumption += consumption;
 
-      const trend: EnergyTrend = {
-        timestamp: time,
-        totalConsumption: 0,
-        byRoom: {},
-        byDeviceType: {},
-        devices: [],
-      };
-
-      for (const device of powerDevices) {
-        const power = device.properties?.power || 0;
-        const energy = device.properties?.energy || 0;
-        const consumption = energy || power;
-
-        if (consumption > 0) {
-          trend.totalConsumption += consumption;
-
-          // By room
-          const roomId = device.roomID;
-          if (roomId) {
-            trend.byRoom[roomId] = (trend.byRoom[roomId] || 0) + consumption;
-          }
-
-          // By device type
-          const deviceType = device.type || "unknown";
-          trend.byDeviceType[deviceType] =
-            (trend.byDeviceType[deviceType] || 0) + consumption;
-
-          // Individual devices
-          trend.devices.push({
-            deviceId: device.id,
-            deviceName: device.name,
-            consumption,
-          });
+        // By room
+        const roomId = device.roomID;
+        if (roomId) {
+          trend.byRoom[roomId] = (trend.byRoom[roomId] || 0) + consumption;
         }
+
+        // By device type
+        const deviceType = device.type || "unknown";
+        trend.byDeviceType[deviceType] =
+          (trend.byDeviceType[deviceType] || 0) + consumption;
+
+        // Individual devices
+        trend.devices.push({
+          deviceId: device.id,
+          deviceName: device.name,
+          consumption,
+        });
       }
-
-      // Sort devices by consumption
-      trend.devices.sort((a, b) => b.consumption - a.consumption);
-
-      intervals.push(trend);
     }
 
-    return intervals;
+    // Sort devices by consumption
+    trend.devices.sort((a, b) => b.consumption - a.consumption);
+
+    return [trend];
   }
 
   /**
@@ -255,7 +244,7 @@ export class AnalyticsEngine {
       // Find last execution
       const lastExecution =
         sceneEvents.length > 0
-          ? Math.max(...sceneEvents.map((e: any) => e.timestamp || e.created))
+          ? sceneEvents.reduce((max: number, e: any) => { const t = e.timestamp || e.created; return t > max ? t : max; }, 0)
           : 0;
 
       // Calculate average duration (simplified - would need paired start/finish events)
