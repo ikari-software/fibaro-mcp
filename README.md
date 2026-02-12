@@ -11,11 +11,14 @@ Use it with MCP-capable clients (Claude Desktop, Cursor, VS Code extensions, etc
 - Get detailed device information and current state
 - Control devices with various actions (on/off, dimming, color control)
 - Support for lights, switches, thermostats, and more
+- **v3**: Bulk operations for multiple devices at once
 
 ### 🎬 Scene Management
 - List all available scenes
 - Get detailed scene information
 - Execute and stop scenes programmatically
+- **v3**: Scene templates with parameter substitution
+- **v3**: Lua REPL for interactive testing
 
 ### 📍 Room & Section Management
 - List all rooms and sections in your home
@@ -26,11 +29,21 @@ Use it with MCP-capable clients (Claude Desktop, Cursor, VS Code extensions, etc
 - Get system information
 - Retrieve weather data
 - Monitor energy consumption
+- **v3**: System backup and restore
+- **v3**: Webhook server and MQTT bridge
 
-### 📊 Real-time Resources
-- Live device states
-- Current weather conditions
-- System status
+### 📊 Analytics & History (v3)
+- Device usage patterns and statistics
+- Scene execution history and performance
+- Energy consumption trends
+- System health monitoring
+- Analytics dashboard
+
+### 🤖 Automation Builder (v3)
+- Visual automation creation with JSON
+- Multi-condition triggers (AND/OR logic)
+- Device state, time, and variable conditions
+- Generates valid Fibaro Lua code
 
 ## Installation
 
@@ -372,10 +385,60 @@ npm start
 
 ## Documentation
 
-- [QUICKSTART.md](QUICKSTART.md)
-- [EXAMPLES.md](EXAMPLES.md)
-- [FEATURES.md](FEATURES.md)
-- [LUA_MANAGEMENT.md](LUA_MANAGEMENT.md)
+- [QUICKSTART.md](QUICKSTART.md) - Getting started guide
+- [EXAMPLES.md](EXAMPLES.md) - Usage examples
+- [FEATURES.md](FEATURES.md) - Complete feature reference
+- [LUA_MANAGEMENT.md](LUA_MANAGEMENT.md) - Lua scene management
+
+### v3 Documentation
+
+- [TEMPLATES.md](TEMPLATES.md) - Scene templates guide
+- [ANALYTICS.md](ANALYTICS.md) - Analytics and insights
+- [INTEGRATIONS.md](INTEGRATIONS.md) - Webhooks and MQTT
+- [AUTOMATION.md](AUTOMATION.md) - Automation builder
+- [MIGRATION_V3.md](MIGRATION_V3.md) - Migration from v2
+
+## AI Assistant Usage Tips
+
+When using this MCP server with AI assistants like Claude, follow these guidelines for efficient operation:
+
+### Avoid Listing Everything First
+
+**Don't** start by listing all devices, scenes, or rooms. The full lists can be over 1MB and waste context.
+
+**Do** use targeted queries:
+- Ask for a specific device by name: `fibaro_device operation=get name="Kitchen Light"`
+- Filter by room: `fibaro_device operation=list room_id=5`
+- Get only what you need: `fibaro_scene operation=get id=10`
+
+### Use Name-Based Lookups
+
+All tools support name-based lookups - you don't need IDs:
+- `fibaro_device operation=control name="Living Room Lamp" action=turnOn`
+- `fibaro_scene operation=run name="Good Night"`
+- `fibaro_variable operation=get name=HomeMode`
+
+### Prefer Intent Tools
+
+The default `intent` toolset (`fibaro_device`, `fibaro_scene`, etc.) combines multiple operations into single tools, reducing API calls.
+
+### Check Analytics Instead of Listing
+
+For overview information, use analytics:
+- `fibaro_analytics operation=system_health` - Quick health check
+- `fibaro_analytics operation=dashboard` - Comprehensive overview
+
+### Example Efficient Workflows
+
+```
+# Bad: Lists everything (1MB+)
+fibaro_device operation=list
+fibaro_scene operation=list
+
+# Good: Targeted queries
+fibaro_device operation=get name="Kitchen Light"
+fibaro_scene operation=run name="Morning Routine"
+```
 
 ## Development
 

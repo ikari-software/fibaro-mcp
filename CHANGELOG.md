@@ -5,6 +5,105 @@ All notable changes to the Fibaro MCP project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2025-01-10
+
+### 🚀 MAJOR RELEASE - Advanced Automation & Analytics
+
+**Version 3.0 brings powerful new capabilities for automation, analytics, and external integrations!**
+
+### Added - 10 New Tools
+
+**Total: 80+ Tools** with comprehensive automation and analytics capabilities.
+
+#### 📋 Scene Templates (`fibaro_template`)
+- JSON-based reusable scene templates
+- Parameter substitution with `{{placeholder}}` syntax
+- Built-in templates for lighting, security, energy
+- Custom template creation and management
+
+#### 📜 Device History (`fibaro_history`)
+- Query historical device states from event log
+- Time-based aggregation (5m, 15m, 1h, 6h, 1d, 1w)
+- Statistics: min, max, average, count
+- Export to JSON or CSV
+
+#### 🎬 Scene History (`fibaro_scene_history`)
+- Scene execution tracking
+- Performance metrics and duration analysis
+- Success/failure rate monitoring
+
+#### 💾 Enhanced Backup (`fibaro_backup`)
+- Comprehensive system export (JSON/YAML)
+- Selective backup (devices, scenes, rooms, etc.)
+- Import with validation and dry-run mode
+- Password exclusion for security
+
+#### 🔧 Lua REPL (`fibaro_repl`)
+- Interactive Lua code execution
+- Temporary scene-based sandboxing
+- Session management with auto-cleanup
+- Multi-session support
+
+#### ⚡ Bulk Operations (`fibaro_bulk`)
+- Query-based device selection
+- Bulk actions: device_action, set_property, enable, disable
+- Parallel execution with concurrency control
+- Dry-run mode for previews
+
+#### 📊 Analytics Engine (`fibaro_analytics`)
+- Device usage patterns and statistics
+- Energy consumption trends by room/device
+- Scene frequency and success rates
+- System health score (0-100)
+- Hourly activity distribution
+- Comprehensive analytics dashboard
+
+#### 📈 Energy History Graph (`fibaro_energy_graph`)
+- Historical power/energy data from native HC2 summary-graph API
+- Works for both devices and rooms
+- Supports power and energy properties
+- Time-series data with HC2-native aggregation
+
+#### 🔌 External Integrations (`fibaro_integration`)
+- **Webhook Server**: HTTP endpoints for external services
+  - Scene triggers, device control, variable updates
+  - Bearer token authentication
+- **MQTT Bridge**: Connect to MQTT brokers
+  - Auto-publish device states
+  - Subscribe to control topics
+  - Home Assistant compatible
+
+#### 🤖 Automation Builder (`fibaro_automation`)
+- Visual automation creation with JSON
+- Multi-condition triggers (AND/OR logic)
+- Condition types: device_state, variable, time, sun_position
+- Action types: device_action, scene, delay, variable_set, notification
+- Generates valid Fibaro Lua code using proper API calls
+- Validation before deployment
+
+### New Resources
+- `fibaro://analytics/dashboard` - Analytics dashboard overview
+
+### Fixed
+- Logger now uses stderr to prevent MCP protocol pollution
+- TypeScript build errors with optional dependencies
+
+### Documentation
+- [TEMPLATES.md](TEMPLATES.md) - Scene templates guide
+- [ANALYTICS.md](ANALYTICS.md) - Analytics and insights
+- [INTEGRATIONS.md](INTEGRATIONS.md) - Webhooks and MQTT setup
+- [AUTOMATION.md](AUTOMATION.md) - Automation builder guide
+- [MIGRATION_V3.md](MIGRATION_V3.md) - Migration from v2
+- [CLAUDE.md](CLAUDE.md) - AI assistant usage guidelines
+
+### Technical
+- 369 unit tests (114 new tests)
+- 90%+ code coverage
+- Optional peer dependencies: express, mqtt, js-yaml
+- Fully backward compatible with v2
+
+---
+
 ## [2.0.0] - 2025-11-21
 
 ### 🚀 MAJOR RELEASE - Comprehensive Fibaro Management
@@ -152,16 +251,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned Features
-- Alarm system support
-- Door lock control
-- Blinds/roller shutter control
-- Scene creation and editing
-- Automation rule management
-- Event notifications and webhooks
-- Device pairing/unpairing
-- Z-Wave network management
-- User management
-- Backup/restore functionality
+- Door lock control enhancements
+- Blinds/roller shutter scheduling
+- Push notification integration
+- Voice assistant integration
+- Mobile app companion
 
 ---
 
