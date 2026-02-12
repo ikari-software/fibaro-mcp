@@ -12,7 +12,7 @@ export class ExportFormatter {
   /**
    * Format export data to string
    */
-  format(exportData: FibaroExport, format: ExportFormat): string {
+  async format(exportData: FibaroExport, format: ExportFormat): Promise<string> {
     logger.debug(`Formatting export as ${format}`);
 
     switch (format) {
@@ -28,7 +28,7 @@ export class ExportFormatter {
   /**
    * Parse export data from string
    */
-  parse(data: string, format: ExportFormat): FibaroExport {
+  async parse(data: string, format: ExportFormat): Promise<FibaroExport> {
     logger.debug(`Parsing export from ${format}`);
 
     try {
@@ -83,12 +83,10 @@ export class ExportFormatter {
     return JSON.stringify(exportData, null, 2);
   }
 
-  private formatYAML(exportData: FibaroExport): string {
+  private async formatYAML(exportData: FibaroExport): Promise<string> {
     try {
-      // Try to load js-yaml dynamically
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const yaml = require("js-yaml");
-      return yaml.dump(exportData, {
+      const yaml = await import("js-yaml");
+      return yaml.default.dump(exportData, {
         indent: 2,
         lineWidth: 120,
         noRefs: true,
@@ -108,12 +106,10 @@ export class ExportFormatter {
     return JSON.parse(data);
   }
 
-  private parseYAML(data: string): FibaroExport {
+  private async parseYAML(data: string): Promise<FibaroExport> {
     try {
-      // Try to load js-yaml dynamically
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const yaml = require("js-yaml");
-      return yaml.load(data) as FibaroExport;
+      const yaml = await import("js-yaml");
+      return yaml.default.load(data) as FibaroExport;
     } catch (error) {
       logger.warn(
         "js-yaml not available, YAML import disabled. Install with: npm install js-yaml",

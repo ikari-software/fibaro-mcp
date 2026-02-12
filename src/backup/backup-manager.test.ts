@@ -343,7 +343,7 @@ describe("ExportFormatter", () => {
   });
 
   describe("formatJSON", () => {
-    it("should format export data as JSON", () => {
+    it("should format export data as JSON", async () => {
       const exportData: FibaroExport = {
         version: "3.0.0",
         export_date: "2025-01-01T00:00:00Z",
@@ -358,7 +358,7 @@ describe("ExportFormatter", () => {
         },
       };
 
-      const result = formatter.format(exportData, "json");
+      const result = await formatter.format(exportData, "json");
 
       expect(result).toContain('"version": "3.0.0"');
       expect(result).toContain('"export_date": "2025-01-01T00:00:00Z"');
@@ -367,7 +367,7 @@ describe("ExportFormatter", () => {
   });
 
   describe("parseJSON", () => {
-    it("should parse JSON export data", () => {
+    it("should parse JSON export data", async () => {
       const jsonData = JSON.stringify({
         version: "3.0.0",
         export_date: "2025-01-01T00:00:00Z",
@@ -382,14 +382,14 @@ describe("ExportFormatter", () => {
         },
       });
 
-      const result = formatter.parse(jsonData, "json");
+      const result = await formatter.parse(jsonData, "json");
 
       expect(result.version).toBe("3.0.0");
       expect(result.export_date).toBe("2025-01-01T00:00:00Z");
     });
 
-    it("should throw on invalid JSON", () => {
-      expect(() => formatter.parse("invalid json", "json")).toThrow();
+    it("should throw on invalid JSON", async () => {
+      await expect(formatter.parse("invalid json", "json")).rejects.toThrow();
     });
   });
 

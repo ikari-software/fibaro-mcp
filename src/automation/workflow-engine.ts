@@ -38,11 +38,16 @@ export class WorkflowEngine {
 
     const parts: string[] = [];
 
-    // Sanitize name/description for Lua embedding
+    // Validate name/description are safe for Lua block comments (blocks ]] [[ -- \)
+    validateDisplayName(automation.name, "automation name");
+    if (automation.description) {
+      validateDisplayName(automation.description, "automation description");
+    }
+
     const safeName = escapeLuaString(automation.name);
     const safeDesc = automation.description ? escapeLuaString(automation.description) : undefined;
 
-    // Header comment
+    // Header comment — safe because validateDisplayName rejects ] and [ characters
     parts.push(`--[[`);
     parts.push(`  Automation: ${safeName}`);
     if (safeDesc) {

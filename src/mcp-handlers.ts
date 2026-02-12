@@ -3280,7 +3280,7 @@ async function handleToolCallInternal(
           include_passwords: includePasswords,
         });
 
-        const formatted = exportFormatter.format(
+        const formatted = await exportFormatter.format(
           exportData,
           exportFormat === "yaml" ? "yaml" : "json"
         );
@@ -3324,7 +3324,7 @@ async function handleToolCallInternal(
           const format = exportFormatter.detectFormat(importData);
 
           // Parse import data
-          const exportData = exportFormatter.parse(importData, format);
+          const exportData = await exportFormatter.parse(importData, format);
 
           // Validate
           const validationResult = importValidator.validate(exportData);
@@ -3392,7 +3392,7 @@ async function handleToolCallInternal(
           const format = exportFormatter.detectFormat(importData);
 
           // Parse import data
-          const exportData = exportFormatter.parse(importData, format);
+          const exportData = await exportFormatter.parse(importData, format);
 
           // Validate first
           const validationResult = importValidator.validate(exportData);

@@ -134,14 +134,14 @@ export class BackupManager {
     this.importCache = new Map();
 
     try {
-      // Import rooms first (devices depend on rooms)
-      if (importTypes.includes("rooms") && exportData.rooms) {
-        await this.importRooms(client, exportData.rooms, options, result);
-      }
-
-      // Import sections (rooms depend on sections)
+      // Import sections first (rooms depend on sections)
       if (importTypes.includes("sections") && exportData.sections) {
         await this.importSections(client, exportData.sections, options, result);
+      }
+
+      // Import rooms (devices depend on rooms)
+      if (importTypes.includes("rooms") && exportData.rooms) {
+        await this.importRooms(client, exportData.rooms, options, result);
       }
 
       // Import devices

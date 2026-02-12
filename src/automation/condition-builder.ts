@@ -14,6 +14,12 @@ import {
 import type { Condition, ConditionGroup, ValidationResult } from "./automation-types.js";
 
 export class ConditionBuilder {
+  /** Map JS-style operators to Lua equivalents */
+  private toLuaOperator(op: string): string {
+    if (op === "!=") return "~=";
+    return op;
+  }
+
   /**
    * Build Lua code for a condition group
    */
@@ -50,7 +56,7 @@ export class ConditionBuilder {
         const getValue = `fibaro.getValue(${condition.deviceId}, "${escapeLuaString(condition.property)}")`;
         const value = formatLuaValue(condition.value);
 
-        return `${getValue} ${condition.operator} ${value}`;
+        return `${getValue} ${this.toLuaOperator(condition.operator)} ${value}`;
       }
 
       case "variable": {
@@ -66,19 +72,20 @@ export class ConditionBuilder {
         const value = formatLuaValue(condition.value);
 
         // Global variables are strings, so handle type conversion
+        const luaOp = this.toLuaOperator(condition.operator);
         if (typeof condition.value === "number") {
-          return `tonumber(${getValue}) ${condition.operator} ${value}`;
+          return `tonumber(${getValue}) ${luaOp} ${value}`;
         } else if (typeof condition.value === "boolean") {
-          return `(${getValue} == "${condition.value ? "true" : "false"}")`;
+          return `(${getValue} ${luaOp} "${condition.value ? "true" : "false"}")`;
         } else {
-          return `${getValue} ${condition.operator} ${value}`;
+          return `${getValue} ${luaOp} ${value}`;
         }
       }
 
       case "time": {
         // Time-based conditions using os.time() and os.date()
         const value = formatLuaValue(condition.value);
-        return `os.time() ${condition.operator} ${value}`;
+        return `os.time() ${this.toLuaOperator(condition.operator)} ${value}`;
       }
 
       case "sun_position": {
@@ -91,11 +98,11 @@ export class ConditionBuilder {
           condition.sunPosition === "sunrise" ? "sunriseHour" : "sunsetHour";
         const offset = condition.timeOffset || 0;
 
-        // Convert sunrise/sunset time to minutes and add offset
-        const sunTime = `(fibaro.getValue(1, "${sunProperty}") * 60 ${offset >= 0 ? "+" : ""} ${offset})`;
+        // Parse "HH:MM" string from sunriseHour/sunsetHour into total minutes
+        const sunTime = `(function() local h,m = string.match(fibaro.getValue(1, "${sunProperty}"), "(%d+):(%d+)") return tonumber(h)*60 + tonumber(m) ${offset >= 0 ? "+" : ""} ${offset} end)()`;
         const currentTime = `(os.date("*t").hour * 60 + os.date("*t").min)`;
 
-        return `${currentTime} ${condition.operator} ${sunTime}`;
+        return `${currentTime} ${this.toLuaOperator(condition.operator)} ${sunTime}`;
       }
 
       case "custom": {
