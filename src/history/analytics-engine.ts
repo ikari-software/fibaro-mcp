@@ -6,6 +6,7 @@
  */
 
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import type {
   DeviceUsagePattern,
   EnergyTrend,
@@ -22,7 +23,7 @@ export class AnalyticsEngine {
    * Analyze device usage patterns from event log
    */
   async analyzeDeviceUsage(
-    client: any,
+    client: FibaroClientLike,
     options: AnalyticsOptions = {}
   ): Promise<DeviceUsagePattern[]> {
     const from = options.from || Date.now() - 7 * 24 * 3600000; // Default: 7 days
@@ -123,7 +124,7 @@ export class AnalyticsEngine {
    * fibaro_home op=energy_graph which queries the HC2 summary-graph API.
    */
   async analyzeEnergyTrends(
-    client: any,
+    client: FibaroClientLike,
     options: AnalyticsOptions = {}
   ): Promise<EnergyTrend[]> {
     logger.debug("Analyzing energy consumption snapshot");
@@ -182,7 +183,7 @@ export class AnalyticsEngine {
    * Analyze scene execution frequency
    */
   async analyzeSceneFrequency(
-    client: any,
+    client: FibaroClientLike,
     options: AnalyticsOptions = {}
   ): Promise<SceneFrequency[]> {
     const from = options.from || Date.now() - 7 * 24 * 3600000;
@@ -247,8 +248,26 @@ export class AnalyticsEngine {
           ? sceneEvents.reduce((max: number, e: any) => { const t = e.timestamp || e.created; return t > max ? t : max; }, 0)
           : 0;
 
-      // Calculate average duration (simplified - would need paired start/finish events)
-      const avgDuration = 0; // Placeholder
+      // Calculate average duration from paired SCENE_STARTED / SCENE_FINISHED events
+      const starts = sceneEvents.filter((e: any) => e.type === "SCENE_STARTED")
+        .sort((a: any, b: any) => (a.timestamp || a.created) - (b.timestamp || b.created));
+      const finishes = sceneEvents.filter((e: any) => e.type === "SCENE_FINISHED")
+        .sort((a: any, b: any) => (a.timestamp || a.created) - (b.timestamp || b.created));
+      let durationSum = 0;
+      let durationCount = 0;
+      let fIdx = 0;
+      for (const start of starts) {
+        const st = start.timestamp || start.created;
+        while (fIdx < finishes.length && (finishes[fIdx].timestamp || finishes[fIdx].created) <= st) {
+          fIdx++;
+        }
+        if (fIdx < finishes.length) {
+          durationSum += (finishes[fIdx].timestamp || finishes[fIdx].created) - st;
+          durationCount++;
+          fIdx++;
+        }
+      }
+      const avgDuration = durationCount > 0 ? durationSum / durationCount : 0;
 
       frequencies.push({
         sceneId,
@@ -275,7 +294,7 @@ export class AnalyticsEngine {
   /**
    * Analyze system health metrics
    */
-  async analyzeSystemHealth(client: any): Promise<SystemHealthMetrics> {
+  async analyzeSystemHealth(client: FibaroClientLike): Promise<SystemHealthMetrics> {
     logger.debug("Analyzing system health");
 
     const devices = await client.getDevices();
@@ -312,8 +331,8 @@ export class AnalyticsEngine {
       logger.warn("Failed to get system uptime", error);
     }
 
-    // Average response time (simplified)
-    const avgResponseTime = 0; // Placeholder - would need to track API response times
+    // Not measurable from event logs alone — requires API-level instrumentation
+    const avgResponseTime = 0;
 
     return {
       timestamp: Date.now(),
@@ -332,7 +351,7 @@ export class AnalyticsEngine {
    * Generate comprehensive analytics dashboard
    */
   async generateDashboard(
-    client: any,
+    client: FibaroClientLike,
     options: AnalyticsOptions = {}
   ): Promise<AnalyticsDashboard> {
     const from = options.from || Date.now() - 7 * 24 * 3600000;
@@ -385,7 +404,7 @@ export class AnalyticsEngine {
    * Get hourly distribution of device activations
    */
   async getHourlyDistribution(
-    client: any,
+    client: FibaroClientLike,
     options: AnalyticsOptions = {}
   ): Promise<HourlyDistribution[]> {
     const from = options.from || Date.now() - 7 * 24 * 3600000;
@@ -418,7 +437,7 @@ export class AnalyticsEngine {
    * Get room activity summary
    */
   async getRoomActivity(
-    client: any,
+    client: FibaroClientLike,
     options: AnalyticsOptions = {}
   ): Promise<RoomActivitySummary[]> {
     const from = options.from || Date.now() - 7 * 24 * 3600000;

@@ -6,6 +6,7 @@
  */
 
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import { getSandboxManager } from "./sandbox-manager.js";
 import type {
   ReplExecutionResult,
@@ -21,7 +22,7 @@ export class LuaRepl {
    * Execute Lua code in a REPL session
    */
   async execute(
-    client: any,
+    client: FibaroClientLike,
     luaCode: string,
     sessionId?: string,
     options: ReplSessionOptions = {}
@@ -101,7 +102,7 @@ export class LuaRepl {
   /**
    * Clear a REPL session
    */
-  async clearSession(client: any, sessionId: string): Promise<void> {
+  async clearSession(client: FibaroClientLike, sessionId: string): Promise<void> {
     logger.info(`Clearing REPL session: ${sessionId}`);
     await this.sandboxManager.deleteSession(client, sessionId);
   }
@@ -109,7 +110,7 @@ export class LuaRepl {
   /**
    * Clear all REPL sessions
    */
-  async clearAllSessions(client: any): Promise<void> {
+  async clearAllSessions(client: FibaroClientLike): Promise<void> {
     logger.info("Clearing all REPL sessions");
     await this.sandboxManager.cleanupSessions(client, { force: true });
   }
@@ -117,7 +118,7 @@ export class LuaRepl {
   /**
    * Perform automatic cleanup of old sessions
    */
-  async autoCleanup(client: any): Promise<void> {
+  async autoCleanup(client: FibaroClientLike): Promise<void> {
     logger.debug("Performing automatic REPL cleanup");
     await this.sandboxManager.cleanupSessions(client);
   }
@@ -125,7 +126,7 @@ export class LuaRepl {
   /**
    * Sync sessions with Fibaro state
    */
-  async sync(client: any): Promise<void> {
+  async sync(client: FibaroClientLike): Promise<void> {
     await this.sandboxManager.syncSessions(client);
   }
 
@@ -181,7 +182,7 @@ print = original_print
    * Get execution output from event log
    */
   private async getExecutionOutput(
-    client: any,
+    client: FibaroClientLike,
     session: ReplSession
   ): Promise<string | undefined> {
     try {

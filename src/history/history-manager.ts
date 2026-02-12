@@ -6,6 +6,7 @@
  */
 
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import type {
   DeviceHistoryEntry,
   HistoryStats,
@@ -24,7 +25,7 @@ export class HistoryManager {
    * Query device history from event log
    */
   async queryDeviceHistory(
-    client: any,
+    client: FibaroClientLike,
     params: HistoryQueryParams,
   ): Promise<DeviceHistoryEntry[]> {
     const { deviceId, from, to, property, limit = 1000 } = params;
@@ -201,7 +202,7 @@ export class HistoryManager {
    * Export device history to structured format
    */
   async exportHistory(
-    client: any,
+    client: FibaroClientLike,
     params: HistoryQueryParams,
     includeStats: boolean = true,
   ): Promise<HistoryExport> {
@@ -243,7 +244,7 @@ export class HistoryManager {
    * Query scene execution history
    */
   async querySceneHistory(
-    client: any,
+    client: FibaroClientLike,
     params: SceneHistoryQueryParams,
   ): Promise<SceneExecution[]> {
     const { sceneId, from, to, status, limit = 1000 } = params;

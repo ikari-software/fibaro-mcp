@@ -6,6 +6,7 @@
  */
 
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import type {
   FibaroExport,
   ExportOptions,
@@ -23,7 +24,7 @@ export class BackupManager {
    * Export Fibaro system data
    */
   async exportSystem(
-    client: any,
+    client: FibaroClientLike,
     options: ExportOptions
   ): Promise<FibaroExport> {
     const startTime = Date.now();
@@ -103,7 +104,7 @@ export class BackupManager {
    * Import Fibaro system data
    */
   async importSystem(
-    client: any,
+    client: FibaroClientLike,
     exportData: FibaroExport,
     options: ImportOptions
   ): Promise<ImportResult> {
@@ -215,7 +216,7 @@ export class BackupManager {
     return allTypes.filter((type) => type !== "users" || options.include_users);
   }
 
-  private async fetchSystemInfo(client: any): Promise<any> {
+  private async fetchSystemInfo(client: FibaroClientLike): Promise<any> {
     try {
       return await client.getSystemInfo();
     } catch (error) {
@@ -224,7 +225,7 @@ export class BackupManager {
     }
   }
 
-  private async fetchDevices(client: any): Promise<any[]> {
+  private async fetchDevices(client: FibaroClientLike): Promise<any[]> {
     try {
       return await client.getDevices();
     } catch (error) {
@@ -233,7 +234,7 @@ export class BackupManager {
     }
   }
 
-  private async fetchScenes(client: any): Promise<any[]> {
+  private async fetchScenes(client: FibaroClientLike): Promise<any[]> {
     try {
       return await client.getScenes();
     } catch (error) {
@@ -242,7 +243,7 @@ export class BackupManager {
     }
   }
 
-  private async fetchRooms(client: any): Promise<any[]> {
+  private async fetchRooms(client: FibaroClientLike): Promise<any[]> {
     try {
       return await client.getRooms();
     } catch (error) {
@@ -251,7 +252,7 @@ export class BackupManager {
     }
   }
 
-  private async fetchSections(client: any): Promise<any[]> {
+  private async fetchSections(client: FibaroClientLike): Promise<any[]> {
     try {
       return await client.getSections();
     } catch (error) {
@@ -260,7 +261,7 @@ export class BackupManager {
     }
   }
 
-  private async fetchGlobalVariables(client: any): Promise<any[]> {
+  private async fetchGlobalVariables(client: FibaroClientLike): Promise<any[]> {
     try {
       return await client.getGlobalVariables();
     } catch (error) {
@@ -269,7 +270,7 @@ export class BackupManager {
     }
   }
 
-  private async fetchUsers(client: any, includePasswords: boolean): Promise<any[]> {
+  private async fetchUsers(client: FibaroClientLike, includePasswords: boolean): Promise<any[]> {
     try {
       const users = await client.getUsers();
       if (!includePasswords) {
@@ -287,7 +288,7 @@ export class BackupManager {
   }
 
   private async importRooms(
-    client: any,
+    client: FibaroClientLike,
     rooms: any[],
     options: ImportOptions,
     result: ImportResult
@@ -333,7 +334,7 @@ export class BackupManager {
   }
 
   private async importSections(
-    client: any,
+    client: FibaroClientLike,
     sections: any[],
     options: ImportOptions,
     result: ImportResult
@@ -378,7 +379,7 @@ export class BackupManager {
   }
 
   private async importDevices(
-    client: any,
+    client: FibaroClientLike,
     devices: any[],
     options: ImportOptions,
     result: ImportResult
@@ -426,7 +427,7 @@ export class BackupManager {
   }
 
   private async importGlobalVariables(
-    client: any,
+    client: FibaroClientLike,
     variables: any[],
     options: ImportOptions,
     result: ImportResult
@@ -471,7 +472,7 @@ export class BackupManager {
   }
 
   private async importScenes(
-    client: any,
+    client: FibaroClientLike,
     scenes: any[],
     options: ImportOptions,
     result: ImportResult
@@ -516,7 +517,7 @@ export class BackupManager {
   }
 
   private async importUsers(
-    client: any,
+    client: FibaroClientLike,
     users: any[],
     options: ImportOptions,
     result: ImportResult
@@ -562,7 +563,7 @@ export class BackupManager {
 
   // Finder helper methods (use importCache when available to avoid repeated API calls)
 
-  private async getCachedList(client: any, key: string, fetcher: () => Promise<any[]>): Promise<any[]> {
+  private async getCachedList(client: FibaroClientLike, key: string, fetcher: () => Promise<any[]>): Promise<any[]> {
     if (this.importCache) {
       if (!this.importCache.has(key)) {
         this.importCache.set(key, await fetcher());
@@ -572,7 +573,7 @@ export class BackupManager {
     return fetcher();
   }
 
-  private async findRoomByName(client: any, name: string): Promise<any | null> {
+  private async findRoomByName(client: FibaroClientLike, name: string): Promise<any | null> {
     try {
       const rooms = await this.getCachedList(client, "rooms", () => client.getRooms());
       return rooms.find((r: any) => r.name === name) || null;
@@ -581,7 +582,7 @@ export class BackupManager {
     }
   }
 
-  private async findSectionByName(client: any, name: string): Promise<any | null> {
+  private async findSectionByName(client: FibaroClientLike, name: string): Promise<any | null> {
     try {
       const sections = await this.getCachedList(client, "sections", () => client.getSections());
       return sections.find((s: any) => s.name === name) || null;
@@ -590,7 +591,7 @@ export class BackupManager {
     }
   }
 
-  private async findDeviceById(client: any, id: number): Promise<any | null> {
+  private async findDeviceById(client: FibaroClientLike, id: number): Promise<any | null> {
     try {
       return await client.getDevice(id);
     } catch {
@@ -598,7 +599,7 @@ export class BackupManager {
     }
   }
 
-  private async findVariableByName(client: any, name: string): Promise<any | null> {
+  private async findVariableByName(client: FibaroClientLike, name: string): Promise<any | null> {
     try {
       const variables = await this.getCachedList(client, "variables", () => client.getGlobalVariables());
       return variables.find((v: any) => v.name === name) || null;
@@ -607,7 +608,7 @@ export class BackupManager {
     }
   }
 
-  private async findSceneByName(client: any, name: string): Promise<any | null> {
+  private async findSceneByName(client: FibaroClientLike, name: string): Promise<any | null> {
     try {
       const scenes = await this.getCachedList(client, "scenes", () => client.getScenes());
       return scenes.find((s: any) => s.name === name) || null;
@@ -616,7 +617,7 @@ export class BackupManager {
     }
   }
 
-  private async findUserByName(client: any, username: string): Promise<any | null> {
+  private async findUserByName(client: FibaroClientLike, username: string): Promise<any | null> {
     try {
       const users = await this.getCachedList(client, "users", () => client.getUsers());
       return users.find((u: any) => u.username === username) || null;

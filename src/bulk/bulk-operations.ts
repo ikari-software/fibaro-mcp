@@ -6,6 +6,7 @@
  */
 
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import { getQueryEngine } from "./query-engine.js";
 import type {
   DeviceQuery,
@@ -23,7 +24,7 @@ export class BulkOperationsManager {
    * Execute bulk operation on devices matching query
    */
   async executeBulkOperation(
-    client: any,
+    client: FibaroClientLike,
     query: DeviceQuery,
     action: BulkAction,
     options: BulkOperationOptions = {}
@@ -120,7 +121,7 @@ export class BulkOperationsManager {
   /**
    * Get preview of devices that would be affected by query
    */
-  async previewQuery(client: any, query: DeviceQuery): Promise<any[]> {
+  async previewQuery(client: FibaroClientLike, query: DeviceQuery): Promise<any[]> {
     const validation = this.queryEngine.validateQuery(query);
     if (!validation.valid) {
       throw new Error(`Invalid query: ${validation.errors.join(", ")}`);
@@ -141,7 +142,7 @@ export class BulkOperationsManager {
   // Private helper methods
 
   private async executeSequential(
-    client: any,
+    client: FibaroClientLike,
     devices: any[],
     action: BulkAction,
     stopOnError: boolean
@@ -191,7 +192,7 @@ export class BulkOperationsManager {
   }
 
   private async executeParallel(
-    client: any,
+    client: FibaroClientLike,
     devices: any[],
     action: BulkAction,
     concurrency: number,
@@ -242,7 +243,7 @@ export class BulkOperationsManager {
   }
 
   private async executeDeviceAction(
-    client: any,
+    client: FibaroClientLike,
     device: any,
     action: BulkAction
   ): Promise<DeviceOperationResult> {
@@ -264,7 +265,7 @@ export class BulkOperationsManager {
           if (!action.property || action.value === undefined) {
             throw new Error("Set property requires 'property' and 'value' fields");
           }
-          await client.setProperty(device.id, action.property, action.value);
+          await client.setDeviceProperty(device.id, action.property, action.value);
           return {
             deviceId: device.id,
             deviceName: device.name,
@@ -319,7 +320,7 @@ export class BulkOperationsManager {
   }
 
   private async rollbackOperations(
-    client: any,
+    client: FibaroClientLike,
     results: DeviceOperationResult[],
     originalAction: BulkAction
   ): Promise<void> {

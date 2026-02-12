@@ -7,6 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import type {
   ReplSession,
   ReplSessionOptions,
@@ -25,7 +26,7 @@ export class SandboxManager {
    * Create a new REPL session with a temporary scene
    */
   async createSession(
-    client: any,
+    client: FibaroClientLike,
     options: ReplSessionOptions = {}
   ): Promise<ReplSession> {
     const sessionId = this.generateSessionId();
@@ -72,7 +73,7 @@ export class SandboxManager {
    * Get an existing session or create a new one
    */
   async getOrCreateSession(
-    client: any,
+    client: FibaroClientLike,
     sessionId?: string,
     options: ReplSessionOptions = {}
   ): Promise<ReplSession> {
@@ -96,7 +97,7 @@ export class SandboxManager {
    * Execute Lua code in a session
    */
   async executeInSession(
-    client: any,
+    client: FibaroClientLike,
     session: ReplSession,
     luaCode: string,
     timeout: number = this.DEFAULT_TIMEOUT
@@ -140,7 +141,7 @@ export class SandboxManager {
   /**
    * Delete a session and its temporary scene
    */
-  async deleteSession(client: any, sessionId: string): Promise<void> {
+  async deleteSession(client: FibaroClientLike, sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       logger.warn(`Session ${sessionId} not found`);
@@ -169,7 +170,7 @@ export class SandboxManager {
    * Cleanup old or inactive sessions
    */
   async cleanupSessions(
-    client: any,
+    client: FibaroClientLike,
     options: ReplCleanupOptions = {}
   ): Promise<ReplCleanupResult> {
     const maxAge = options.maxAge || this.DEFAULT_MAX_AGE;
@@ -226,7 +227,7 @@ export class SandboxManager {
   /**
    * Find REPL sessions by scene name pattern
    */
-  async findReplScenes(client: any): Promise<any[]> {
+  async findReplScenes(client: FibaroClientLike): Promise<any[]> {
     try {
       const scenes = await client.getScenes();
       return scenes.filter((scene: any) => scene.name?.startsWith(this.SESSION_PREFIX));
@@ -239,7 +240,7 @@ export class SandboxManager {
   /**
    * Sync sessions with actual scenes on Fibaro
    */
-  async syncSessions(client: any): Promise<void> {
+  async syncSessions(client: FibaroClientLike): Promise<void> {
     logger.debug("Syncing REPL sessions with Fibaro");
 
     try {

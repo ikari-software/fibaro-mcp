@@ -201,7 +201,7 @@ describe("BulkOperationsManager", () => {
     mockClient = {
       getDevices: vi.fn(),
       callAction: vi.fn(),
-      setProperty: vi.fn(),
+      setDeviceProperty: vi.fn(),
       updateDevice: vi.fn(),
     };
   });
@@ -236,7 +236,7 @@ describe("BulkOperationsManager", () => {
       ];
 
       mockClient.getDevices.mockResolvedValue(mockDevices);
-      mockClient.setProperty.mockResolvedValue({});
+      mockClient.setDeviceProperty.mockResolvedValue({});
 
       const query: DeviceQuery = { room_ids: [1] };
       const action: BulkAction = { type: "set_property", property: "value", value: 50 };
@@ -245,9 +245,9 @@ describe("BulkOperationsManager", () => {
 
       expect(result.total).toBe(2);
       expect(result.successful).toBe(2);
-      expect(mockClient.setProperty).toHaveBeenCalledTimes(2);
-      expect(mockClient.setProperty).toHaveBeenCalledWith(1, "value", 50);
-      expect(mockClient.setProperty).toHaveBeenCalledWith(2, "value", 50);
+      expect(mockClient.setDeviceProperty).toHaveBeenCalledTimes(2);
+      expect(mockClient.setDeviceProperty).toHaveBeenCalledWith(1, "value", 50);
+      expect(mockClient.setDeviceProperty).toHaveBeenCalledWith(2, "value", 50);
     });
 
     it("should handle enable action", async () => {

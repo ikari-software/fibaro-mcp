@@ -6,18 +6,20 @@
  */
 
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import type { IMqttBridge, MqttConfig, MqttSubscription } from "./integration-types.js";
 
 export class MqttBridge implements IMqttBridge {
   private client: any = null;
   private config: MqttConfig;
-  private fibaroClient: any;
+  private fibaroClient: FibaroClientLike;
   private connected: boolean = false;
   private statePublishInterval: any = null;
+  private publishInFlight = false;
   private mqtt: any = null;
   private subscriptions: Map<string, MqttSubscription> = new Map();
 
-  constructor(config: MqttConfig, fibaroClient: any) {
+  constructor(config: MqttConfig, fibaroClient: FibaroClientLike) {
     this.config = config;
     this.fibaroClient = fibaroClient;
   }
@@ -219,10 +221,17 @@ export class MqttBridge implements IMqttBridge {
     const interval = this.config.publishInterval || 60000; // Default: 1 minute
 
     this.statePublishInterval = setInterval(async () => {
+      if (this.publishInFlight) {
+        logger.debug("Skipping MQTT publish cycle — previous still in flight");
+        return;
+      }
+      this.publishInFlight = true;
       try {
         await this.publishDeviceStates();
       } catch (error) {
         logger.error("Failed to publish device states", error);
+      } finally {
+        this.publishInFlight = false;
       }
     }, interval);
 
@@ -350,7 +359,7 @@ export class MqttBridge implements IMqttBridge {
 // Factory function to create MQTT bridge
 export async function createMqttBridge(
   config: MqttConfig,
-  fibaroClient: any
+  fibaroClient: FibaroClientLike
 ): Promise<MqttBridge> {
   return new MqttBridge(config, fibaroClient);
 }

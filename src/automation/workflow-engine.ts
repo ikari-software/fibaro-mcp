@@ -6,6 +6,7 @@
  */
 
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import { getConditionBuilder } from "./condition-builder.js";
 import {
   escapeLuaString,
@@ -91,7 +92,7 @@ export class WorkflowEngine {
    * Create automation from definition and optionally deploy to Fibaro
    */
   async createAutomation(
-    client: any,
+    client: FibaroClientLike,
     automation: Automation,
     deploy: boolean = false
   ): Promise<AutomationResult> {

@@ -7,17 +7,18 @@
 
 import { timingSafeEqual } from "node:crypto";
 import { logger } from "../logger.js";
+import type { FibaroClientLike } from "../fibaro-client.js";
 import type { IWebhookServer, WebhookConfig, WebhookRoute } from "./integration-types.js";
 
 export class WebhookServer implements IWebhookServer {
   private app: any = null;
   private server: any = null;
   private config: WebhookConfig;
-  private client: any;
+  private client: FibaroClientLike;
   private running: boolean = false;
   private express: any = null;
 
-  constructor(config: WebhookConfig, client: any) {
+  constructor(config: WebhookConfig, client: FibaroClientLike) {
     this.config = config;
     this.client = client;
   }
@@ -276,7 +277,7 @@ export class WebhookServer implements IWebhookServer {
 // Factory function to create webhook server
 export async function createWebhookServer(
   config: WebhookConfig,
-  client: any
+  client: FibaroClientLike
 ): Promise<WebhookServer> {
   return new WebhookServer(config, client);
 }
