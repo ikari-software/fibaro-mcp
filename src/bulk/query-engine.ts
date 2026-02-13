@@ -8,6 +8,12 @@
 import { logger } from "../logger.js";
 import type { DeviceQuery } from "./bulk-types.js";
 
+/** Max regex pattern length to limit complexity */
+const MAX_PATTERN_LENGTH = 200;
+
+/** Patterns known to cause catastrophic backtracking (nested quantifiers) */
+const REDOS_PATTERN = /([+*])\)?[+*]/;
+
 export class QueryEngine {
   /**
    * Filter devices based on query criteria
@@ -50,8 +56,14 @@ export class QueryEngine {
       });
     }
 
-    // Filter by name pattern (regex)
+    // Filter by name pattern (regex with ReDoS protection)
     if (query.name_pattern) {
+      if (query.name_pattern.length > MAX_PATTERN_LENGTH) {
+        throw new Error(`name_pattern too long (max ${MAX_PATTERN_LENGTH} characters)`);
+      }
+      if (REDOS_PATTERN.test(query.name_pattern)) {
+        throw new Error("name_pattern contains potentially unsafe nested quantifiers");
+      }
       const pattern = new RegExp(query.name_pattern, "i");
       filtered = filtered.filter((d) => pattern.test(d.name || ""));
     }
@@ -123,12 +135,18 @@ export class QueryEngine {
       }
     }
 
-    // Validate name pattern (regex)
+    // Validate name pattern (regex with ReDoS protection)
     if (query.name_pattern) {
-      try {
-        new RegExp(query.name_pattern);
-      } catch (error) {
-        errors.push(`Invalid name pattern regex: ${query.name_pattern}`);
+      if (query.name_pattern.length > MAX_PATTERN_LENGTH) {
+        errors.push(`name_pattern too long (max ${MAX_PATTERN_LENGTH} characters)`);
+      } else if (REDOS_PATTERN.test(query.name_pattern)) {
+        errors.push("name_pattern contains potentially unsafe nested quantifiers");
+      } else {
+        try {
+          new RegExp(query.name_pattern);
+        } catch (error) {
+          errors.push(`Invalid name pattern regex: ${query.name_pattern}`);
+        }
       }
     }
 

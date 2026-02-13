@@ -217,7 +217,11 @@ export class BackupManager {
     }
 
     if (options.exclude && options.exclude.length > 0) {
-      return allTypes.filter((type) => !options.exclude!.includes(type));
+      return allTypes.filter(
+        (type) =>
+          !options.exclude!.includes(type) &&
+          (type !== "users" || options.include_users)
+      );
     }
 
     // Default: include everything except users (for security)
@@ -327,6 +331,7 @@ export class BackupManager {
           }
         } else {
           await client.createRoom(room);
+          this.invalidateCache("rooms");
           result.imported.rooms++;
         }
       } catch (error) {
@@ -372,6 +377,7 @@ export class BackupManager {
           }
         } else {
           await client.createSection(section);
+          this.invalidateCache("sections");
           result.imported.sections++;
         }
       } catch (error) {
@@ -465,6 +471,7 @@ export class BackupManager {
           }
         } else {
           await client.createGlobalVariable(variable);
+          this.invalidateCache("variables");
           result.imported.variables++;
         }
       } catch (error) {
@@ -510,6 +517,7 @@ export class BackupManager {
           }
         } else {
           await client.createScene(scene);
+          this.invalidateCache("scenes");
           result.imported.scenes++;
         }
       } catch (error) {
@@ -555,6 +563,7 @@ export class BackupManager {
           }
         } else {
           await client.createUser(user);
+          this.invalidateCache("users");
           result.imported.users++;
         }
       } catch (error) {
@@ -570,6 +579,10 @@ export class BackupManager {
   }
 
   // Finder helper methods (use importCache when available to avoid repeated API calls)
+
+  private invalidateCache(key: string): void {
+    this.importCache?.delete(key);
+  }
 
   private async getCachedList(client: FibaroClientLike, key: string, fetcher: () => Promise<any[]>): Promise<any[]> {
     if (this.importCache) {
