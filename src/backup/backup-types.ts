@@ -125,7 +125,7 @@ export interface ImportResult {
   skipped: ImportStats;
   failed: ImportStats;
   errors: Array<{
-    type: ExportDataType;
+    type: ExportDataType | "unknown";
     id?: number;
     name?: string;
     error: string;

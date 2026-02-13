@@ -19,6 +19,7 @@ import type {
 export class BackupManager {
   // Per-import cache to avoid redundant API calls in finder methods
   private importCache: Map<string, any[]> | null = null;
+  private importInProgress = false;
 
   /**
    * Export Fibaro system data
@@ -108,6 +109,11 @@ export class BackupManager {
     exportData: FibaroExport,
     options: ImportOptions
   ): Promise<ImportResult> {
+    if (this.importInProgress) {
+      throw new Error("An import is already in progress");
+    }
+    this.importInProgress = true;
+
     const startTime = Date.now();
     logger.info("Starting system import", { options, dry_run: options.dry_run });
 
@@ -171,13 +177,14 @@ export class BackupManager {
     } catch (error) {
       result.success = false;
       result.errors.push({
-        type: "devices",
+        type: "unknown",
         error: `Import failed: ${error instanceof Error ? error.message : String(error)}`,
       });
       logger.error("System import failed", error);
     } finally {
-      // Clear per-import cache
+      // Clear per-import cache and release mutex
       this.importCache = null;
+      this.importInProgress = false;
     }
 
     result.duration_ms = Date.now() - startTime;

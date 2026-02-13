@@ -84,22 +84,19 @@ export class ExportFormatter {
   }
 
   private async formatYAML(exportData: FibaroExport): Promise<string> {
+    let yaml;
     try {
-      const yaml = await import("js-yaml");
-      return yaml.default.dump(exportData, {
-        indent: 2,
-        lineWidth: 120,
-        noRefs: true,
-      });
-    } catch (error) {
-      logger.warn(
-        "js-yaml not available, YAML export disabled. Install with: npm install js-yaml",
-        error
-      );
+      yaml = await import("js-yaml");
+    } catch {
       throw new Error(
         "YAML format not available. Please install js-yaml: npm install js-yaml"
       );
     }
+    return yaml.default.dump(exportData, {
+      indent: 2,
+      lineWidth: 120,
+      noRefs: true,
+    });
   }
 
   private parseJSON(data: string): FibaroExport {
@@ -107,18 +104,15 @@ export class ExportFormatter {
   }
 
   private async parseYAML(data: string): Promise<FibaroExport> {
+    let yaml;
     try {
-      const yaml = await import("js-yaml");
-      return yaml.default.load(data) as FibaroExport;
-    } catch (error) {
-      logger.warn(
-        "js-yaml not available, YAML import disabled. Install with: npm install js-yaml",
-        error
-      );
+      yaml = await import("js-yaml");
+    } catch {
       throw new Error(
         "YAML format not available. Please install js-yaml: npm install js-yaml"
       );
     }
+    return yaml.default.load(data) as FibaroExport;
   }
 }
 

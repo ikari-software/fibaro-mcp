@@ -14,11 +14,11 @@
 const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_.:-]*$/;
 
 /**
- * Pattern for safe display names (automation names, messages).
- * More permissive: allows spaces, accented characters, common punctuation.
- * Blocks Lua comment/string delimiters: ]] [[ -- \
+ * Dangerous sequences for Lua display names embedded in block comments.
+ * Blocks: -- (line comment), ]] [[ (long string/comment delimiters), \ (escape).
+ * Single hyphens and brackets are allowed.
  */
-const SAFE_DISPLAY_NAME = /^[^\\[\]\-]{1,200}$/;
+const DANGEROUS_DISPLAY_PATTERNS = /--|\\|\]\]|\[\[/;
 
 /**
  * Escape a string value for embedding in a Lua double-quoted string.
@@ -70,9 +70,9 @@ export function validateIdentifier(value: string, label: string): void {
  * More permissive than identifiers but still blocks injection vectors.
  */
 export function validateDisplayName(value: string, label: string): void {
-  if (!SAFE_DISPLAY_NAME.test(value)) {
+  if (!value || value.length > 200 || DANGEROUS_DISPLAY_PATTERNS.test(value)) {
     throw new Error(
-      `Invalid ${label}: "${value}" contains characters that could break Lua code generation`
+      `Invalid ${label}: "${value}" contains sequences that could break Lua code generation (-- \\\\ ]] [[)`
     );
   }
 }
