@@ -188,6 +188,7 @@ export class BackupManager {
     }
 
     result.duration_ms = Date.now() - startTime;
+    result.success = result.errors.length === 0;
 
     logger.info("System import complete", {
       success: result.success,

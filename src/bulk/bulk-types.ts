@@ -77,12 +77,3 @@ export interface BulkOperationOptions {
   stop_on_error?: boolean;
   rollback_on_error?: boolean;
 }
-
-/**
- * Rollback entry for error recovery
- */
-export interface RollbackEntry {
-  deviceId: number;
-  action: BulkAction;
-  previousValue?: any;
-}
