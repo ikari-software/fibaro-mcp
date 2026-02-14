@@ -199,8 +199,6 @@ export class BulkOperationsManager {
     stopOnError: boolean
   ): Promise<Omit<BulkOperationResult, "duration" | "query">> {
     const results: DeviceOperationResult[] = [];
-    let successful = 0;
-    let failed = 0;
     let shouldStop = false;
 
     // Process devices in chunks
@@ -220,18 +218,14 @@ export class BulkOperationsManager {
       const chunkResults = await Promise.all(chunkPromises);
       results.push(...chunkResults);
 
-      for (const result of chunkResults) {
-        if (result.success) {
-          successful++;
-        } else {
-          failed++;
-          if (stopOnError) {
-            shouldStop = true;
-            break;
-          }
-        }
+      if (stopOnError && chunkResults.some((r) => !r.success)) {
+        shouldStop = true;
       }
     }
+
+    // Derive counts from results to avoid miscount when stopOnError breaks mid-chunk
+    const successful = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
 
     return {
       total: devices.length,
