@@ -326,13 +326,15 @@ export class BackupManager {
           }
 
           if (options.update_existing) {
-            await client.updateRoom(existing.id, room);
+            const { id: _id, ...updateData } = room;
+            await client.updateRoom(existing.id, updateData);
             result.imported.rooms++;
           } else {
             result.skipped.rooms++;
           }
         } else {
-          await client.createRoom(room);
+          const { id: _id, ...createData } = room;
+          await client.createRoom(createData);
           this.invalidateCache("rooms");
           result.imported.rooms++;
         }
@@ -372,13 +374,15 @@ export class BackupManager {
           }
 
           if (options.update_existing) {
-            await client.updateSection(existing.id, section);
+            const { id: _id, ...updateData } = section;
+            await client.updateSection(existing.id, updateData);
             result.imported.sections++;
           } else {
             result.skipped.sections++;
           }
         } else {
-          await client.createSection(section);
+          const { id: _id, ...createData } = section;
+          await client.createSection(createData);
           this.invalidateCache("sections");
           result.imported.sections++;
         }
@@ -517,13 +521,15 @@ export class BackupManager {
           }
 
           if (options.update_existing) {
-            await client.updateScene(existing.id, scene);
+            const { id: _id, ...updateData } = scene;
+            await client.updateScene(existing.id, updateData);
             result.imported.scenes++;
           } else {
             result.skipped.scenes++;
           }
         } else {
-          await client.createScene(scene);
+          const { id: _id, ...createData } = scene;
+          await client.createScene(createData);
           this.invalidateCache("scenes");
           result.imported.scenes++;
         }
@@ -563,13 +569,15 @@ export class BackupManager {
           }
 
           if (options.update_existing) {
-            await client.updateUser(existing.id, user);
+            const { id: _id, ...updateData } = user;
+            await client.updateUser(existing.id, updateData);
             result.imported.users++;
           } else {
             result.skipped.users++;
           }
         } else {
-          await client.createUser(user);
+          const { id: _id, ...createData } = user;
+          await client.createUser(createData);
           this.invalidateCache("users");
           result.imported.users++;
         }

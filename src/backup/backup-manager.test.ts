@@ -245,7 +245,7 @@ describe("BackupManager", () => {
       });
 
       expect(result.imported.rooms).toBe(1);
-      expect(mockClient.updateRoom).toHaveBeenCalledWith(1, { id: 1, name: "Living Room", section: 1 });
+      expect(mockClient.updateRoom).toHaveBeenCalledWith(1, { name: "Living Room", section: 1 });
     });
 
     it("should perform dry run without making changes", async () => {
