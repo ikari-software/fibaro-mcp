@@ -255,6 +255,8 @@ export class WorkflowEngine {
       case "custom": {
         if (!action.customLua) {
           errors.push("custom action requires customLua field");
+        } else {
+          warnings.push("custom action uses raw Lua that is not syntax-validated");
         }
         break;
       }

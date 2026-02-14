@@ -170,9 +170,12 @@ export class ConditionBuilder {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    const validOperators = ["==", "!=", ">", "<", ">=", "<="];
-    if (!validOperators.includes(condition.operator)) {
-      errors.push(`Invalid operator: ${condition.operator}`);
+    // Custom conditions use raw Lua and don't need an operator
+    if (condition.type !== "custom") {
+      const validOperators = ["==", "!=", ">", "<", ">=", "<="];
+      if (!validOperators.includes(condition.operator)) {
+        errors.push(`Invalid operator: ${condition.operator}`);
+      }
     }
 
     switch (condition.type) {
@@ -225,6 +228,8 @@ export class ConditionBuilder {
       case "custom": {
         if (!condition.customLua) {
           errors.push("custom condition requires customLua field");
+        } else {
+          warnings.push("custom condition uses raw Lua that is not syntax-validated");
         }
         break;
       }
