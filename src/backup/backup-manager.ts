@@ -213,7 +213,9 @@ export class BackupManager {
     ];
 
     if (options.include && options.include.length > 0) {
-      return options.include;
+      return options.include.filter(
+        (type) => type !== "users" || options.include_users
+      );
     }
 
     if (options.exclude && options.exclude.length > 0) {
@@ -619,7 +621,8 @@ export class BackupManager {
 
   private async findDeviceById(client: FibaroClientLike, id: number): Promise<any | null> {
     try {
-      return await client.getDevice(id);
+      const devices = await this.getCachedList(client, "devices", () => client.getDevices());
+      return devices.find((d: any) => d.id === id) || null;
     } catch {
       return null;
     }
