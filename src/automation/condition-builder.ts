@@ -108,7 +108,7 @@ export class ConditionBuilder {
         // Use fibaro.getValue(1, "sunriseHour") and fibaro.getValue(1, "sunsetHour")
         const sunProperty =
           condition.sunPosition === "sunrise" ? "sunriseHour" : "sunsetHour";
-        const offset = condition.timeOffset ? validateNumber(condition.timeOffset, "timeOffset") : 0;
+        const offset = condition.timeOffset !== undefined ? validateNumber(condition.timeOffset, "timeOffset") : 0;
 
         // Parse "HH:MM" string from sunriseHour/sunsetHour into total minutes
         const sunTime = `(function() local h,m = string.match(fibaro.getValue(1, "${sunProperty}"), "(%d+):(%d+)") return tonumber(h)*60 + tonumber(m) ${offset >= 0 ? "+" : ""} ${offset} end)()`;

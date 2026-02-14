@@ -213,9 +213,8 @@ export class BackupManager {
     ];
 
     if (options.include && options.include.length > 0) {
-      return options.include.filter(
-        (type) => type !== "users" || options.include_users
-      );
+      // Explicit include list is intentional — honor it as-is
+      return options.include;
     }
 
     if (options.exclude && options.exclude.length > 0) {
