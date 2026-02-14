@@ -16,6 +16,46 @@ import {
 } from "./energy-aggregator.js";
 import type { FibaroClientLike } from "./fibaro-client.js";
 
+/**
+ * Extract the `op` parameter from tool args with helpful error messages.
+ * Detects common mistakes like using `operation` instead of `op`.
+ */
+function extractOp(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  supportedOps: string
+): { op: string } | { error: CallToolResult } {
+  const op = args?.op as string | undefined;
+  if (op) return { op };
+
+  const operation = args?.operation as string | undefined;
+  if (operation) {
+    return {
+      error: {
+        content: [
+          {
+            type: "text",
+            text: `${toolName}: use "op" instead of "operation". Example: ${toolName} op=${operation}\nSupported ops: ${supportedOps}`,
+          },
+        ],
+        isError: true,
+      },
+    };
+  }
+
+  return {
+    error: {
+      content: [
+        {
+          type: "text",
+          text: `${toolName}: missing required parameter "op".\nSupported ops: ${supportedOps}`,
+        },
+      ],
+      isError: true,
+    },
+  };
+}
+
 // Cache getTools() result — toolset is determined by env var, stable at runtime
 let cachedTools: ListToolsResult | null = null;
 let cachedToolset: string | null = null;
@@ -3258,18 +3298,9 @@ async function handleToolCallInternal(
     const exportFormatter = getExportFormatter();
     const importValidator = getImportValidator();
 
-    const op = args?.op as string;
-    if (!op) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: 'fibaro_backup: missing required parameter "op"',
-          },
-        ],
-        isError: true,
-      };
-    }
+    const extracted = extractOp("fibaro_backup", args, "export|validate|import");
+    if ("error" in extracted) return extracted.error;
+    const op = extracted.op;
 
     switch (op) {
       case "export": {
@@ -3502,18 +3533,9 @@ async function handleToolCallInternal(
     const { getBulkOperationsManager } = await import("./bulk/bulk-operations.js");
     const bulkOps = getBulkOperationsManager();
 
-    const op = args?.op as string;
-    if (!op) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: 'fibaro_bulk: missing required parameter "op"',
-          },
-        ],
-        isError: true,
-      };
-    }
+    const extractedBulk = extractOp("fibaro_bulk", args, "execute|preview");
+    if ("error" in extractedBulk) return extractedBulk.error;
+    const op = extractedBulk.op;
 
     switch (op) {
       case "execute": {
@@ -3667,18 +3689,9 @@ async function handleToolCallInternal(
     const { getLuaRepl } = await import("./repl/lua-repl.js");
     const repl = getLuaRepl();
 
-    const op = args?.op as string;
-    if (!op) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: 'fibaro_repl: missing required parameter "op"',
-          },
-        ],
-        isError: true,
-      };
-    }
+    const extractedRepl = extractOp("fibaro_repl", args, "execute|preview|list_sessions|clear_session|clear_all|sync");
+    if ("error" in extractedRepl) return extractedRepl.error;
+    const op = extractedRepl.op;
 
     switch (op) {
       case "execute": {
@@ -3860,18 +3873,9 @@ async function handleToolCallInternal(
     const { getAnalyticsEngine } = await import("./history/analytics-engine.js");
     const analytics = getAnalyticsEngine();
 
-    const op = args?.op as string;
-    if (!op) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: 'fibaro_analytics: missing required parameter "op"',
-          },
-        ],
-        isError: true,
-      };
-    }
+    const extractedAnalytics = extractOp("fibaro_analytics", args, "device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity");
+    if ("error" in extractedAnalytics) return extractedAnalytics.error;
+    const op = extractedAnalytics.op;
 
     const options = {
       from: args?.from as number | undefined,
@@ -4178,18 +4182,9 @@ async function handleToolCallInternal(
   }
 
   if (name === "fibaro_integration") {
-    const op = args?.op as string;
-    if (!op) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: 'fibaro_integration: missing required parameter "op"',
-          },
-        ],
-        isError: true,
-      };
-    }
+    const extractedIntegration = extractOp("fibaro_integration", args, "webhook_start|webhook_stop|webhook_status|mqtt_connect|mqtt_disconnect|mqtt_status|mqtt_publish");
+    if ("error" in extractedIntegration) return extractedIntegration.error;
+    const op = extractedIntegration.op;
 
     // Webhook operations
     if (op === "webhook_start") {
@@ -4361,18 +4356,9 @@ async function handleToolCallInternal(
     const { getWorkflowEngine } = await import("./automation/workflow-engine.js");
     const workflow = getWorkflowEngine();
 
-    const op = args?.op as string;
-    if (!op) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: 'fibaro_automation: missing required parameter "op"',
-          },
-        ],
-        isError: true,
-      };
-    }
+    const extractedAutomation = extractOp("fibaro_automation", args, "validate|generate_lua|create");
+    if ("error" in extractedAutomation) return extractedAutomation.error;
+    const op = extractedAutomation.op;
 
     const automation = args?.automation as any;
 
