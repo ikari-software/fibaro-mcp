@@ -202,9 +202,8 @@ export class ConditionBuilder {
       case "time": {
         if (condition.value === undefined) {
           errors.push("time condition requires value (timestamp)");
-        }
-        if (typeof condition.value !== "number") {
-          warnings.push("time condition value should be a number (Unix timestamp)");
+        } else if (typeof condition.value !== "number") {
+          errors.push("time condition value must be a number (Unix timestamp)");
         }
         break;
       }
