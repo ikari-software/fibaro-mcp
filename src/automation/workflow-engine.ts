@@ -127,7 +127,6 @@ export class WorkflowEngine {
           name: automation.name,
           roomID: 1, // Default room
           lua: luaCode,
-          type: "lua",
           isLua: true,
         });
         sceneId = scene.id;

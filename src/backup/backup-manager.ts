@@ -412,6 +412,11 @@ export class BackupManager {
         const existing = await this.findDeviceById(client, device.id);
 
         if (existing) {
+          if (options.skip_existing) {
+            result.skipped.devices++;
+            continue;
+          }
+
           if (options.update_existing) {
             await client.updateDevice(device.id, {
               name: device.name,
