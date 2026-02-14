@@ -44,6 +44,9 @@ export function formatLuaValue(value: any): string {
   } else if (typeof value === "boolean") {
     return value ? "true" : "false";
   } else if (typeof value === "number") {
+    if (Number.isNaN(value)) return "(0/0)";
+    if (value === Infinity) return "math.huge";
+    if (value === -Infinity) return "(-math.huge)";
     return String(value);
   } else if (value === null || value === undefined) {
     return "nil";

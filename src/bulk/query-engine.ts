@@ -104,9 +104,9 @@ export class QueryEngine {
 
     // Check for empty query
     const hasAnyCriteria =
-      query.device_ids ||
-      query.room_ids ||
-      query.section_ids ||
+      (query.device_ids && query.device_ids.length > 0) ||
+      (query.room_ids && query.room_ids.length > 0) ||
+      (query.section_ids && query.section_ids.length > 0) ||
       query.type ||
       query.base_type ||
       query.interface ||

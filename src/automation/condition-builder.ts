@@ -232,7 +232,7 @@ export class ConditionBuilder {
   // Private helper methods
 
   private isConditionGroup(obj: any): obj is ConditionGroup {
-    return obj && obj.operator && Array.isArray(obj.conditions);
+    return obj && (obj.operator === "AND" || obj.operator === "OR") && Array.isArray(obj.conditions);
   }
 
 }
