@@ -18,7 +18,7 @@ The analytics system offers:
 Get a comprehensive dashboard of your system:
 
 ```
-fibaro_analytics operation=dashboard
+fibaro_analytics op=dashboard
 ```
 
 Or access it as a resource:
@@ -32,7 +32,7 @@ Read resource: fibaro://analytics/dashboard
 Analyze how your devices are being used:
 
 ```
-fibaro_analytics operation=device_usage days=30
+fibaro_analytics op=device_usage days=30
 ```
 
 Returns for each device:
@@ -60,7 +60,7 @@ Returns for each device:
 Track energy consumption patterns:
 
 ```
-fibaro_analytics operation=energy_trends days=7
+fibaro_analytics op=energy_trends days=7
 ```
 
 Analyzes:
@@ -72,7 +72,7 @@ Analyzes:
 
 **Filter by room:**
 ```
-fibaro_analytics operation=energy_trends days=7 room_id=5
+fibaro_analytics op=energy_trends days=7 room_id=5
 ```
 
 ### Scene Frequency Analysis
@@ -80,7 +80,7 @@ fibaro_analytics operation=energy_trends days=7 room_id=5
 Monitor how often scenes run and their success rates:
 
 ```
-fibaro_analytics operation=scene_frequency days=30
+fibaro_analytics op=scene_frequency days=30
 ```
 
 Returns for each scene:
@@ -95,7 +95,7 @@ Returns for each scene:
 Get an overall health assessment:
 
 ```
-fibaro_analytics operation=system_health
+fibaro_analytics op=system_health
 ```
 
 Returns a health score (0-100) based on:
@@ -117,7 +117,7 @@ Returns a health score (0-100) based on:
 See when your home is most active:
 
 ```
-fibaro_analytics operation=hourly_distribution days=7
+fibaro_analytics op=hourly_distribution days=7
 ```
 
 Returns activity counts for each hour (0-23), useful for:
@@ -130,7 +130,7 @@ Returns activity counts for each hour (0-23), useful for:
 Compare activity across rooms:
 
 ```
-fibaro_analytics operation=room_activity days=7
+fibaro_analytics op=room_activity days=7
 ```
 
 For each room:
@@ -170,7 +170,7 @@ All analytics operations support a `days` parameter:
 **Custom date ranges** are also supported:
 
 ```
-fibaro_analytics operation=device_usage from=1704067200000 to=1704672000000
+fibaro_analytics op=device_usage from=1704067200000 to=1704672000000
 ```
 
 ## Filtering
@@ -180,8 +180,8 @@ fibaro_analytics operation=device_usage from=1704067200000 to=1704672000000
 Limit analysis to specific room(s):
 
 ```
-fibaro_analytics operation=energy_trends room_id=5
-fibaro_analytics operation=device_usage room_ids=[5, 7, 12]
+fibaro_analytics op=energy_trends room_id=5
+fibaro_analytics op=device_usage room_ids=[5, 7, 12]
 ```
 
 ### By Device Type
@@ -189,7 +189,7 @@ fibaro_analytics operation=device_usage room_ids=[5, 7, 12]
 Focus on specific device types:
 
 ```
-fibaro_analytics operation=device_usage device_type=com.fibaro.binarySwitch
+fibaro_analytics op=device_usage device_type=com.fibaro.binarySwitch
 ```
 
 ### By Device
@@ -197,7 +197,7 @@ fibaro_analytics operation=device_usage device_type=com.fibaro.binarySwitch
 Analyze a specific device:
 
 ```
-fibaro_analytics operation=device_usage device_id=42
+fibaro_analytics op=device_usage device_id=42
 ```
 
 ## Use Cases
@@ -207,7 +207,7 @@ fibaro_analytics operation=device_usage device_id=42
 Use hourly distribution to find the best times for automations:
 
 ```
-fibaro_analytics operation=hourly_distribution days=30
+fibaro_analytics op=hourly_distribution days=30
 ```
 
 If activity peaks at 7 AM and 6 PM, schedule morning routines and evening scenes accordingly.
@@ -217,7 +217,7 @@ If activity peaks at 7 AM and 6 PM, schedule morning routines and evening scenes
 Find devices consuming the most power:
 
 ```
-fibaro_analytics operation=energy_trends days=30
+fibaro_analytics op=energy_trends days=30
 ```
 
 Look at consumption by device type to identify optimization opportunities.
@@ -227,7 +227,7 @@ Look at consumption by device type to identify optimization opportunities.
 Track scene performance to catch issues early:
 
 ```
-fibaro_analytics operation=scene_frequency days=7
+fibaro_analytics op=scene_frequency days=7
 ```
 
 Investigate any scenes with success rates below 95%.
@@ -237,7 +237,7 @@ Investigate any scenes with success rates below 95%.
 Find devices that may have stopped working:
 
 ```
-fibaro_analytics operation=device_usage days=30
+fibaro_analytics op=device_usage days=30
 ```
 
 Look for devices with zero activations that should be active.
@@ -247,7 +247,7 @@ Look for devices with zero activations that should be active.
 Run a comprehensive check:
 
 ```
-fibaro_analytics operation=system_health
+fibaro_analytics op=system_health
 ```
 
 Address any warnings or errors in the recommendations.
@@ -284,8 +284,10 @@ Address any warnings or errors in the recommendations.
 - Consider caching dashboard results for frequent access
 - The system health check is lightweight and can run frequently
 
+All operations use the `op` parameter: `fibaro_analytics op=dashboard`
+
 ## Related
 
-- [Device History](FEATURES.md#device-history) - Raw historical data access
-- [Scene History](FEATURES.md#scene-history) - Detailed scene execution logs
-- [Energy Aggregation](FEATURES.md#energy-aggregation) - Power consumption calculations
+- [Scene Templates](TEMPLATES.md) - Pre-built automation patterns
+- [Automation Builder](AUTOMATION.md) - Complex multi-step automations
+- [Examples](EXAMPLES.md) - More usage examples

@@ -15,7 +15,7 @@ The template system includes:
 ### List Available Templates
 
 ```
-fibaro_template list
+fibaro_template op=list
 ```
 
 Returns all available templates organized by category:
@@ -28,7 +28,7 @@ Returns all available templates organized by category:
 ### Get Template Details
 
 ```
-fibaro_template get template_id=motion-light
+fibaro_template op=get template_id=motion-light
 ```
 
 Returns the complete template definition including:
@@ -40,7 +40,7 @@ Returns the complete template definition including:
 ### Instantiate a Template
 
 ```
-fibaro_template instantiate template_id=motion-light parameters={"sensor_id": 42, "light_id": 15, "timeout": 300}
+fibaro_template op=instantiate template_id=motion-light parameters={"sensor_id": 42, "light_id": 15, "timeout": 300}
 ```
 
 Creates a complete Lua scene from the template with your parameters substituted.
@@ -61,7 +61,7 @@ Automatically turns on a light when motion is detected and turns it off after a 
 
 **Example:**
 ```
-fibaro_template instantiate template_id=motion-light parameters={"sensor_id": 42, "light_id": 15, "timeout": 180, "brightness": 80}
+fibaro_template op=instantiate template_id=motion-light parameters={"sensor_id": 42, "light_id": 15, "timeout": 180, "brightness": 80}
 ```
 
 ### sunset-lights
@@ -145,13 +145,13 @@ Use `{{parameter_name}}` syntax in your Lua code. The template engine handles:
 3. Or use the API to add templates dynamically:
 
 ```
-fibaro_template create template={"id": "my-template", "name": "My Template", ...}
+fibaro_template op=create template={"id": "my-template", "name": "My Template", ...}
 ```
 
 ### Deleting Templates
 
 ```
-fibaro_template delete template_id=my-template
+fibaro_template op=delete template_id=my-template
 ```
 
 Note: Built-in templates cannot be deleted.
@@ -177,17 +177,17 @@ Templates are validated when loaded or created:
 
 1. Browse available templates:
    ```
-   fibaro_template list
+   fibaro_template op=list
    ```
 
 2. Get details for a template you want to use:
    ```
-   fibaro_template get template_id=motion-light
+   fibaro_template op=get template_id=motion-light
    ```
 
 3. Instantiate with your parameters:
    ```
-   fibaro_template instantiate template_id=motion-light parameters={"sensor_id": 42, "light_id": 15}
+   fibaro_template op=instantiate template_id=motion-light parameters={"sensor_id": 42, "light_id": 15}
    ```
 
 4. Review the generated Lua code
@@ -201,10 +201,12 @@ Templates are validated when loaded or created:
 | Operation | Description |
 |-----------|-------------|
 | `list` | List all available templates |
-| `get template_id=<id>` | Get template details |
-| `instantiate template_id=<id> parameters={...}` | Generate Lua code from template |
-| `create template={...}` | Add a custom template |
-| `delete template_id=<id>` | Remove a custom template |
+| `get` | Get template details (`template_id` required) |
+| `instantiate` | Generate Lua code from template (`template_id`, `parameters` required) |
+| `create` | Add a custom template (`template` required) |
+| `delete` | Remove a custom template (`template_id` required) |
+
+All operations use the `op` parameter: `fibaro_template op=list`
 
 ## Related
 

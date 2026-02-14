@@ -17,25 +17,63 @@ npm install mqtt
 npm install express mqtt
 ```
 
-If these packages are not installed, the integration features gracefully degrade and return helpful error messages.
+If these packages are not installed, the integration features gracefully degrade and return helpful error messages explaining what to install.
 
 ## Webhook Server
 
-The webhook server provides HTTP endpoints for external services to interact with your Fibaro system.
+The webhook server provides HTTP endpoints for external services to interact with your Fibaro system. Routes are configured when starting the server.
 
 ### Starting the Webhook Server
 
 ```
-fibaro_integration operation=webhook_start port=3000 auth_token=your-secret-token
+fibaro_integration op=webhook_start webhook_config={"port": 3000, "authToken": "your-secret-token", "routes": [...]}
 ```
 
-**Parameters:**
+**`webhook_config` parameters:**
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| port | number | No | 3000 | HTTP port to listen on |
-| auth_token | string | No | - | Bearer token for authentication |
+| `port` | number | No | 8080 | HTTP port to listen on |
+| `host` | string | No | 0.0.0.0 | Host to bind to |
+| `authToken` | string | No | - | Bearer token for authentication |
+| `routes` | array | No | [] | Route definitions (see below) |
 
-Once started, the server provides these endpoints:
+### Route Configuration
+
+Routes define what HTTP endpoints are available and what Fibaro actions they trigger:
+
+```json
+{
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/scene/42/execute",
+      "action": "run_scene",
+      "sceneId": 42
+    },
+    {
+      "method": "POST",
+      "path": "/device/15/action",
+      "action": "device_action",
+      "deviceId": 15,
+      "actionName": "turnOn"
+    },
+    {
+      "method": "POST",
+      "path": "/variable/HomeMode",
+      "action": "set_variable",
+      "variableName": "HomeMode"
+    }
+  ]
+}
+```
+
+**Route actions:**
+| Action | Required Fields | Description |
+|--------|----------------|-------------|
+| `run_scene` | `sceneId` | Execute a Fibaro scene |
+| `device_action` | `deviceId`, `actionName` | Execute a device action (args from request body) |
+| `set_variable` | `variableName` | Set a global variable (value from request body or query) |
+| `custom` | - | Returns request body as response |
 
 ### Built-in Endpoints
 
@@ -43,63 +81,11 @@ Once started, the server provides these endpoints:
 ```
 GET /health
 ```
-Returns `{"status": "ok"}` - useful for monitoring and load balancers.
-
-#### Execute Scene
-```
-POST /scene/:sceneId/execute
-Authorization: Bearer your-secret-token
-```
-
-Triggers the specified scene.
-
-**Example:**
-```bash
-curl -X POST http://localhost:3000/scene/42/execute \
-  -H "Authorization: Bearer your-secret-token"
-```
-
-#### Control Device
-```
-POST /device/:deviceId/action
-Authorization: Bearer your-secret-token
-Content-Type: application/json
-
-{"action": "turnOn", "args": []}
-```
-
-Executes an action on the specified device.
-
-**Example:**
-```bash
-curl -X POST http://localhost:3000/device/15/action \
-  -H "Authorization: Bearer your-secret-token" \
-  -H "Content-Type: application/json" \
-  -d '{"action": "setValue", "args": [50]}'
-```
-
-#### Set Variable
-```
-POST /variable/:name
-Authorization: Bearer your-secret-token
-Content-Type: application/json
-
-{"value": "newValue"}
-```
-
-Sets a global variable value.
-
-**Example:**
-```bash
-curl -X POST http://localhost:3000/variable/HomeMode \
-  -H "Authorization: Bearer your-secret-token" \
-  -H "Content-Type: application/json" \
-  -d '{"value": "away"}'
-```
+Returns `{"status": "ok"}` — always available, no authentication required.
 
 ### Authentication
 
-When `auth_token` is provided, all requests (except `/health`) must include:
+When `authToken` is provided, all requests (except `/health`) must include:
 
 ```
 Authorization: Bearer your-secret-token
@@ -107,13 +93,56 @@ Authorization: Bearer your-secret-token
 
 Requests without valid authentication receive a `401 Unauthorized` response.
 
-### Stopping the Server
-
-The webhook server automatically stops when the MCP server shuts down. You can also check its status:
+### Example: Setting Up Scene and Device Control
 
 ```
-fibaro_integration operation=status
+fibaro_integration op=webhook_start webhook_config={
+  "port": 3000,
+  "authToken": "my-secret-token",
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/scene/42/execute",
+      "action": "run_scene",
+      "sceneId": 42
+    },
+    {
+      "method": "POST",
+      "path": "/device/15/action",
+      "action": "device_action",
+      "deviceId": 15,
+      "actionName": "setValue"
+    }
+  ]
+}
 ```
+
+Then from external services:
+
+```bash
+# Trigger scene 42
+curl -X POST http://localhost:3000/scene/42/execute \
+  -H "Authorization: Bearer my-secret-token"
+
+# Control device 15
+curl -X POST http://localhost:3000/device/15/action \
+  -H "Authorization: Bearer my-secret-token" \
+  -H "Content-Type: application/json" \
+  -d '{"args": [50]}'
+
+# Set a variable
+curl -X POST http://localhost:3000/variable/HomeMode \
+  -H "Authorization: Bearer my-secret-token" \
+  -H "Content-Type: application/json" \
+  -d '{"value": "away"}'
+```
+
+### Limitations
+
+The webhook server instance is **not persisted** across tool calls. This means:
+- `webhook_stop` and `webhook_status` are not currently functional
+- Restarting the MCP server stops all webhook servers
+- Starting a second webhook on the same port will fail with EADDRINUSE
 
 ## MQTT Bridge
 
@@ -122,127 +151,98 @@ The MQTT bridge connects your Fibaro system to an MQTT broker, enabling integrat
 ### Connecting to MQTT
 
 ```
-fibaro_integration operation=mqtt_connect broker=mqtt://localhost:1883 username=mqttuser password=secret
+fibaro_integration op=mqtt_connect mqtt_config={
+  "broker": "mqtt://localhost:1883",
+  "username": "mqttuser",
+  "password": "secret",
+  "clientId": "fibaro-mcp",
+  "publishState": true
+}
 ```
 
-**Parameters:**
+**`mqtt_config` parameters:**
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| broker | string | Yes | - | MQTT broker URL |
-| username | string | No | - | MQTT username |
-| password | string | No | - | MQTT password |
-| client_id | string | No | fibaro-mcp | Client identifier |
-| topic_prefix | string | No | fibaro | Topic prefix for all messages |
-
-### Topic Structure
-
-The MQTT bridge uses a hierarchical topic structure:
-
-```
-{prefix}/device/{deviceId}/state     - Device state updates
-{prefix}/device/{deviceId}/set       - Commands to device
-{prefix}/scene/{sceneId}/trigger     - Scene triggers
-{prefix}/variable/{name}/state       - Variable values
-{prefix}/variable/{name}/set         - Variable commands
-{prefix}/status                       - Connection status
-```
+| `broker` | string | Yes | - | MQTT broker URL |
+| `username` | string | No | - | MQTT username |
+| `password` | string | No | - | MQTT password |
+| `clientId` | string | No | fibaro-mcp | Client identifier |
+| `publishState` | boolean | No | false | Auto-publish device states periodically |
+| `subscriptions` | array | No | [] | Topics to subscribe to with action handlers |
 
 ### Auto-Publishing Device States
 
-Once connected, the bridge automatically publishes device states:
+When `publishState: true`, the bridge periodically publishes all device states to MQTT:
 
 ```
-fibaro/device/42/state
-{"value": true, "brightness": 75, "lastUpdate": 1704067200000}
+fibaro/devices/{deviceId}/state
 ```
 
-State updates are published:
-- On initial connection (all devices)
-- When device values change (polled periodically)
-- When explicitly refreshed
-
-### Subscribing to Commands
-
-The bridge subscribes to command topics:
-
-**Device Control:**
-```
-fibaro/device/42/set
-{"action": "turnOff"}
-```
-
-**Scene Trigger:**
-```
-fibaro/scene/5/trigger
-{}
-```
-
-**Variable Set:**
-```
-fibaro/variable/HomeMode/set
-{"value": "home"}
-```
-
-### Publishing Custom Messages
-
-You can publish custom MQTT messages:
-
-```
-fibaro_integration operation=publish topic=custom/alert message={"type": "motion", "room": "kitchen"}
-```
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| topic | string | Yes | MQTT topic to publish to |
-| message | string | Yes | Message payload (JSON recommended) |
-| qos | number | No | Quality of Service (0, 1, or 2) |
-| retain | boolean | No | Retain message on broker |
-
-### Integration Status
-
-Check the status of all integrations:
-
-```
-fibaro_integration operation=status
-```
-
-Returns:
+**Example payload:**
 ```json
 {
-  "webhook": {
-    "running": true,
-    "port": 3000,
-    "routes": 4
-  },
-  "mqtt": {
-    "connected": true,
-    "broker": "mqtt://localhost:1883",
-    "subscriptions": 12,
-    "lastPublish": 1704067200000
+  "id": 42,
+  "name": "Living Room Light",
+  "type": "com.fibaro.binarySwitch",
+  "roomID": 5,
+  "enabled": true,
+  "properties": {
+    "value": true,
+    "dead": false
   }
 }
 ```
 
-## Home Assistant Integration
+States are published with `retain: true` so new subscribers get the latest state immediately.
 
-### MQTT Discovery
+### Subscribing to Commands
 
-The MQTT bridge supports Home Assistant MQTT discovery. Devices are automatically announced with proper configuration:
+Configure subscriptions to control Fibaro devices via MQTT messages:
 
-```
-homeassistant/light/fibaro_42/config
+```json
 {
-  "name": "Living Room Light",
-  "unique_id": "fibaro_42",
-  "state_topic": "fibaro/device/42/state",
-  "command_topic": "fibaro/device/42/set",
-  "brightness": true,
-  "schema": "json"
+  "subscriptions": [
+    {
+      "topic": "home/lights/+/set",
+      "action": "device_action",
+      "deviceId": 42,
+      "actionName": "turnOn"
+    },
+    {
+      "topic": "home/scenes/trigger",
+      "action": "run_scene",
+      "sceneId": 5
+    },
+    {
+      "topic": "home/variables/+/set",
+      "action": "set_variable",
+      "variableName": "HomeMode"
+    }
+  ]
 }
 ```
 
-### REST Commands
+**Subscription actions:**
+| Action | Required Fields | Description |
+|--------|----------------|-------------|
+| `run_scene` | `sceneId` | Execute a Fibaro scene |
+| `device_action` | `deviceId`, `actionName` | Execute a device action |
+| `set_variable` | `variableName` | Set a global variable (message = value) |
+
+MQTT wildcards are supported in topic patterns:
+- `+` matches a single topic level (e.g., `home/+/set`)
+- `#` matches all remaining levels (e.g., `home/#`)
+
+### Limitations
+
+The MQTT bridge instance is **not persisted** across tool calls. This means:
+- `mqtt_disconnect`, `mqtt_status`, and `mqtt_publish` are not currently functional
+- Restarting the MCP server disconnects all MQTT bridges
+- A future version may add an integration registry for lifecycle management
+
+## Integration with External Platforms
+
+### Home Assistant (REST Commands)
 
 For webhook integration with Home Assistant, add to your `configuration.yaml`:
 
@@ -260,37 +260,30 @@ rest_command:
     headers:
       Authorization: "Bearer your-secret-token"
       Content-Type: "application/json"
-    payload: '{"action": "{{ action }}", "args": {{ args | default([]) }}}'
+    payload: '{"args": {{ args | default([]) }}}'
 ```
 
-## Node-RED Integration
+Note: You must configure matching routes in `webhook_config.routes` for these endpoints.
 
-### MQTT Nodes
+### Node-RED
 
-1. Add an MQTT broker configuration pointing to your broker
-2. Use MQTT In nodes to subscribe to `fibaro/device/#` for state updates
-3. Use MQTT Out nodes to publish commands to `fibaro/device/+/set`
-
-### HTTP Nodes
-
-1. Use HTTP Request nodes to call webhook endpoints
-2. Add Authorization header with your Bearer token
-3. Parse JSON responses for further processing
+1. **MQTT Nodes:** Configure an MQTT broker and subscribe to `fibaro/devices/#` for state updates
+2. **HTTP Nodes:** Use HTTP Request nodes to call webhook endpoints with Bearer token authentication
 
 ## Security Considerations
 
-1. **Use authentication** - Always set `auth_token` for webhook server
-2. **Use TLS** - For production, use HTTPS and MQTTS
-3. **Network isolation** - Limit access to webhook port via firewall
-4. **Strong tokens** - Use long, random authentication tokens
-5. **Credential storage** - Store credentials in environment variables
+1. **Use authentication** — Always set `authToken` for the webhook server
+2. **Use TLS** — For production, use HTTPS and MQTTS
+3. **Network isolation** — Limit access to webhook port via firewall
+4. **Strong tokens** — Use long, random authentication tokens
+5. **Credential storage** — Store MQTT credentials securely
 
 ## Troubleshooting
 
 ### Webhook Not Starting
 
 ```
-Error: express library not found
+Error: Express is not installed. Install it with: npm install express
 ```
 
 Install express: `npm install express`
@@ -298,18 +291,14 @@ Install express: `npm install express`
 ### MQTT Connection Failed
 
 ```
-Error: MQTT library not found
+Error: MQTT library is not installed. Install it with: npm install mqtt
 ```
 
 Install mqtt: `npm install mqtt`
 
-### Authentication Errors
+### Port Already in Use
 
-Ensure your Bearer token matches exactly (case-sensitive).
-
-### No Device Updates
-
-Check that the MQTT bridge has permission to read device states and that your broker accepts connections.
+Starting a second webhook server on the same port will fail. Restart the MCP server to free the port.
 
 ## API Reference
 
@@ -317,30 +306,17 @@ Check that the MQTT bridge has permission to read device states and that your br
 
 | Operation | Description |
 |-----------|-------------|
-| `webhook_start` | Start HTTP webhook server |
-| `mqtt_connect` | Connect to MQTT broker |
-| `status` | Get status of all integrations |
-| `publish` | Publish MQTT message |
+| `webhook_start` | Start HTTP webhook server (requires `webhook_config`) |
+| `webhook_stop` | Stop webhook server (not yet implemented) |
+| `webhook_status` | Get webhook server status (not yet implemented) |
+| `mqtt_connect` | Connect to MQTT broker (requires `mqtt_config`) |
+| `mqtt_disconnect` | Disconnect MQTT bridge (not yet implemented) |
+| `mqtt_status` | Get MQTT bridge status (not yet implemented) |
+| `mqtt_publish` | Publish MQTT message (not yet implemented) |
 
-### Webhook Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `port` | number | HTTP port (default: 3000) |
-| `auth_token` | string | Bearer authentication token |
-
-### MQTT Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `broker` | string | MQTT broker URL |
-| `username` | string | MQTT username |
-| `password` | string | MQTT password |
-| `client_id` | string | MQTT client ID |
-| `topic_prefix` | string | Topic prefix (default: fibaro) |
+All operations use the `op` parameter: `fibaro_integration op=webhook_start ...`
 
 ## Related
 
 - [Automation Builder](AUTOMATION.md) - Create automations triggered by external events
 - [Examples](EXAMPLES.md) - More integration examples
-- [Quickstart](QUICKSTART.md) - Getting started guide

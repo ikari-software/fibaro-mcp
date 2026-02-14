@@ -22,7 +22,7 @@ An automation consists of:
 3. **Actions** - What to do when triggered
 
 ```
-fibaro_automation operation=create automation={
+fibaro_automation op=create automation={
   "name": "Evening Lights",
   "description": "Turn on lights at sunset",
   "conditions": {...},
@@ -347,7 +347,7 @@ For advanced users, inject custom Lua code:
 Before deploying, validate your automation:
 
 ```
-fibaro_automation operation=validate automation={...}
+fibaro_automation op=validate automation={...}
 ```
 
 The validator checks:
@@ -376,7 +376,7 @@ The validator checks:
 Preview the generated Lua without deploying:
 
 ```
-fibaro_automation operation=generate_lua automation={...}
+fibaro_automation op=generate_lua automation={...}
 ```
 
 This returns the complete Lua scene code that would be created.
@@ -386,7 +386,7 @@ This returns the complete Lua scene code that would be created.
 Create and deploy the automation to Fibaro:
 
 ```
-fibaro_automation operation=create automation={...} deploy=true
+fibaro_automation op=create automation={...} deploy=true
 ```
 
 **Parameters:**
@@ -542,9 +542,11 @@ When `deploy=true`:
 
 | Operation | Description |
 |-----------|-------------|
-| `create` | Create automation (optionally deploy) |
+| `create` | Create automation (optionally deploy to Fibaro) |
 | `validate` | Validate automation structure |
 | `generate_lua` | Preview generated Lua code |
+
+All operations use the `op` parameter: `fibaro_automation op=create ...`
 
 ### Automation Object
 
