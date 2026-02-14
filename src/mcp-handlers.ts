@@ -7,103 +7,65 @@ import {
   type ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { findMatches, isPluralishQuery } from "./name-lookup.js";
+import {
+  aggregateDeviceStats,
+  validateParams,
+  formatForResponse,
+  type AggregationInterval,
+  type MetricType,
+} from "./energy-aggregator.js";
+import type { FibaroClientLike } from "./fibaro-client.js";
 
-export type FibaroClientLike = {
-  getDevices: () => Promise<any[]>;
-  getDevice: (id: number) => Promise<any>;
-  callAction: (deviceId: number, action: string, args?: any[]) => Promise<any>;
-  turnOn: (deviceId: number) => Promise<void>;
-  turnOff: (deviceId: number) => Promise<void>;
-  setBrightness: (deviceId: number, level: number) => Promise<void>;
-  setColor: (deviceId: number, r: number, g: number, b: number, w?: number) => Promise<void>;
-  setTemperature: (deviceId: number, temperature: number) => Promise<void>;
-  getRooms: () => Promise<any[]>;
-  getSections: () => Promise<any[]>;
-  getScenes: () => Promise<any[]>;
-  getScene: (sceneId: number) => Promise<any>;
-  runScene: (sceneId: number) => Promise<void>;
-  stopScene: (sceneId: number) => Promise<void>;
-  getGlobalVariables: () => Promise<any[]>;
-  getGlobalVariable: (name: string) => Promise<any>;
-  setGlobalVariable: (name: string, value: string) => Promise<void>;
-  getSystemInfo: () => Promise<any>;
-  getWeather: () => Promise<any>;
-  getEnergyPanel: () => Promise<any>;
-  getSceneLua: (sceneId: number) => Promise<string>;
-  getQuickApps: () => Promise<any[]>;
-  getDeviceLua: (deviceId: number) => Promise<any>;
-  createScene: (scene: {
-    name: string;
-    roomID: number;
-    lua?: string;
-    type?: string;
-    isLua?: boolean;
-  }) => Promise<any>;
-  updateScene: (sceneId: number, updates: any) => Promise<any>;
-  deleteScene: (sceneId: number) => Promise<void>;
-  createQuickApp: (qa: any) => Promise<any>;
-  updateQuickAppCode: (deviceId: number, code: string) => Promise<void>;
-  updateQuickAppVariables: (deviceId: number, variables: any[]) => Promise<void>;
-  deleteQuickApp: (deviceId: number) => Promise<void>;
-  deleteDevice: (deviceId: number) => Promise<void>;
-  createRoom: (room: any) => Promise<any>;
-  updateRoom: (roomId: number, updates: any) => Promise<any>;
-  deleteRoom: (roomId: number) => Promise<void>;
-  createSection: (section: any) => Promise<any>;
-  updateSection: (sectionId: number, updates: any) => Promise<any>;
-  deleteSection: (sectionId: number) => Promise<void>;
-  getPanels: () => Promise<any>;
-  getClimateZones: () => Promise<any[]>;
-  setClimateMode: (zoneId: number, mode: string) => Promise<void>;
-  getUsers: () => Promise<any[]>;
-  getUser: (userId: number) => Promise<any>;
-  getUserSettings: (userId: number) => Promise<any>;
-  getSystemSettings: () => Promise<any>;
-  createUser: (user: any) => Promise<any>;
-  updateUser: (userId: number, updates: any) => Promise<any>;
-  deleteUser: (userId: number) => Promise<void>;
-  getProfiles: () => Promise<any[]>;
-  getActiveProfile: () => Promise<any>;
-  setActiveProfile: (profileId: number) => Promise<void>;
-  getNotifications: () => Promise<any[]>;
-  sendNotification: (notification: any) => Promise<any>;
-  getAlarms: () => Promise<any>;
-  getAlarmPartitions: () => Promise<any>;
-  getAlarmDevices: () => Promise<any>;
-  armAlarm: (partitionId: number) => Promise<void>;
-  disarmAlarm: (partitionId: number) => Promise<void>;
-  getLastEvents: (limit?: number) => Promise<any>;
-  getHistory: (params?: any) => Promise<any>;
-  getDeviceStats: (deviceId: number, params?: any) => Promise<any>;
-  createGlobalVariable: (variable: any) => Promise<any>;
-  deleteGlobalVariable: (name: string) => Promise<void>;
-  createBackup: () => Promise<any>;
-  getBackups: () => Promise<any[]>;
-  restoreBackup: (backupId: string) => Promise<void>;
-  getSettings: () => Promise<any>;
-  updateSettings: (settings: Record<string, any>) => Promise<void>;
-  restartSystem: () => Promise<void>;
-  getEventLog: (params?: any) => Promise<any>;
-  getGeofences: () => Promise<any[]>;
-  createGeofence: (geofence: any) => Promise<any>;
-  updateGeofence: (geofenceId: number, updates: any) => Promise<any>;
-  deleteGeofence: (geofenceId: number) => Promise<void>;
-  getPlugins: () => Promise<any[]>;
-  installPlugin: (url: string) => Promise<any>;
-  uninstallPlugin: (pluginId: string) => Promise<any>;
-  restartPlugin: (pluginId: string) => Promise<any>;
-  triggerCustomEvent: (name: string, data?: any) => Promise<any>;
-  getZWaveNetwork: () => Promise<any>;
-  startZWaveInclusion: () => Promise<void>;
-  stopZWaveInclusion: () => Promise<void>;
-  startZWaveExclusion: () => Promise<void>;
-  stopZWaveExclusion: () => Promise<void>;
-  removeFailedZWaveNode: (nodeId: number) => Promise<void>;
-  healZWaveNetwork: () => Promise<void>;
-};
+/**
+ * Extract the `op` parameter from tool args with helpful error messages.
+ * Detects common mistakes like using `operation` instead of `op`.
+ */
+function extractOp(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  supportedOps: string
+): { op: string } | { error: CallToolResult } {
+  const op = args?.op as string | undefined;
+  if (op) return { op };
+
+  const operation = args?.operation as string | undefined;
+  if (operation) {
+    return {
+      error: {
+        content: [
+          {
+            type: "text",
+            text: `${toolName}: use "op" instead of "operation". Example: ${toolName} op=${operation}\nSupported ops: ${supportedOps}`,
+          },
+        ],
+        isError: true,
+      },
+    };
+  }
+
+  return {
+    error: {
+      content: [
+        {
+          type: "text",
+          text: `${toolName}: missing required parameter "op".\nSupported ops: ${supportedOps}`,
+        },
+      ],
+      isError: true,
+    },
+  };
+}
+
+// Cache getTools() result — toolset is determined by env var, stable at runtime
+let cachedTools: ListToolsResult | null = null;
+let cachedToolset: string | null = null;
 
 export function getTools(): ListToolsResult {
   const toolset = (process.env.FIBARO_TOOLSET || "intent").toLowerCase();
+
+  if (cachedTools && cachedToolset === toolset) {
+    return cachedTools;
+  }
 
   const withFormat = (tools: any[]) => {
     return tools.map((t) => {
@@ -176,7 +138,7 @@ export function getTools(): ListToolsResult {
       {
         name: "fibaro_device",
         description:
-          "Device intent tool: list/get/control devices and perform common actions (turn on/off, set brightness/color/temperature, call arbitrary action, read Quick App Lua).",
+          "Device management: list/get/control devices. IMPORTANT: Avoid 'op=list' without filters - it returns 1MB+ of data. Instead: use 'op=get' with 'name' parameter for specific devices, or filter with room_id/type/interface. Supports: turn_on, turn_off, set_brightness, set_color, set_temperature, action, get_lua.",
         inputSchema: {
           type: "object",
           properties: {
@@ -239,7 +201,7 @@ export function getTools(): ListToolsResult {
       {
         name: "fibaro_scene",
         description:
-          "Scene intent tool: list/get/run/stop scenes and manage Lua scenes (create, update Lua, get Lua, delete).",
+          "Scene management: list/get/run/stop scenes and Lua code. IMPORTANT: Avoid 'op=list' without filters - use 'op=get' with 'name' or 'id' for specific scenes, or filter by room_id. Supports: run, stop, create, update_lua, get_lua, delete.",
         inputSchema: {
           type: "object",
           properties: {
@@ -316,7 +278,7 @@ export function getTools(): ListToolsResult {
       {
         name: "fibaro_home",
         description:
-          "Home/system intent tool: rooms/sections/users/profiles/notifications/alarms/zwave/backups/settings/weather/system info/custom events/plugins.",
+          "Home/system management: rooms, sections, users, weather, energy_graph, energy_panel, system_info. For quick stats use 'op=device_stats'. For current power consumption use 'op=energy_panel'. For historical energy/power data use 'op=energy_graph'. Supports: rooms, sections, users, profiles, notifications, alarms, zwave, backups, settings, weather, system_info, energy_graph, energy_panel, plugins.",
         inputSchema: {
           type: "object",
           properties: {
@@ -327,7 +289,7 @@ export function getTools(): ListToolsResult {
             op: {
               type: "string",
               description:
-                "Operation: system_info|weather|energy_panel|rooms|sections|create_room|update_room|delete_room|create_section|update_section|delete_section|users|create_user|update_user|delete_user|profiles|get_active_profile|set_active_profile|notifications|send_notification|alarms|arm_alarm|disarm_alarm|zwave_network|start_zwave_inclusion|stop_zwave_inclusion|start_zwave_exclusion|stop_zwave_exclusion|remove_failed_zwave_node|heal_zwave_network|create_backup|list_backups|restore_backup|get_settings|update_settings|restart_system|get_event_log|geofences|create_geofence|update_geofence|delete_geofence|plugins|install_plugin|uninstall_plugin|restart_plugin|trigger_custom_event|device_stats",
+                "Operation: system_info|weather|energy_graph|energy_panel|rooms|sections|create_room|update_room|delete_room|create_section|update_section|delete_section|users|create_user|update_user|delete_user|profiles|get_active_profile|set_active_profile|notifications|send_notification|alarms|arm_alarm|disarm_alarm|zwave_network|start_zwave_inclusion|stop_zwave_inclusion|start_zwave_exclusion|stop_zwave_exclusion|remove_failed_zwave_node|heal_zwave_network|create_backup|list_backups|restore_backup|get_settings|update_settings|restart_system|get_event_log|geofences|create_geofence|update_geofence|delete_geofence|plugins|install_plugin|uninstall_plugin|restart_plugin|trigger_custom_event|device_stats|energy_graph|energy_panel",
             },
             room_id: { type: "number" },
             section_id: { type: "number" },
@@ -360,6 +322,26 @@ export function getTools(): ListToolsResult {
             users: { type: "array", items: { type: "number" } },
             device_id: { type: "number" },
             params: { type: "object" },
+            aggregation: {
+              type: "string",
+              enum: ["raw", "1min", "5min", "15min", "1hour", "6hour", "auto"],
+              description: "For device_stats: aggregation interval (auto selects based on time span)",
+            },
+            max_points: {
+              type: "number",
+              description: "For device_stats: max data points (default: 1000)",
+            },
+            metrics: {
+              type: "array",
+              items: { type: "string", enum: ["power", "energy", "voltage", "current"] },
+              description: "For device_stats: metrics to include",
+            },
+            property: { type: "string", description: "For device_stats: legacy property filter" },
+            grouping: {
+              type: "string",
+              enum: ["devices", "rooms"],
+              description: "For energy_graph: group by devices or rooms (default: devices)",
+            },
           },
           required: ["op"],
         },
@@ -1417,16 +1399,69 @@ export function getTools(): ListToolsResult {
       },
       {
         name: "get_device_stats",
-        description: "Get device statistics",
+        description:
+          "Get device energy/power statistics with intelligent aggregation. Automatically handles large datasets by aggregating data based on time span. Returns aggregated metrics (power, energy, voltage, current) with min/max/avg values per time bucket.",
         inputSchema: {
           type: "object",
           properties: {
-            device_id: { type: "number" },
-            from: { type: "number" },
-            to: { type: "number" },
-            property: { type: "string" },
+            device_id: { type: "number", description: "Device ID to get stats for" },
+            from: { type: "number", description: "Start timestamp (Unix seconds)" },
+            to: { type: "number", description: "End timestamp (Unix seconds)" },
+            property: { type: "string", description: "Legacy: specific property to fetch" },
+            aggregation: {
+              type: "string",
+              enum: ["raw", "1min", "5min", "15min", "1hour", "6hour", "auto"],
+              description:
+                "Aggregation interval. 'auto' (default) selects based on time span: <=1h: raw, <=6h: 5min, <=24h: 15min, <=7d: 1hour, >7d: 6hour",
+            },
+            max_points: {
+              type: "number",
+              description: "Maximum data points to return (default: 1000). Data will be downsampled if exceeded.",
+            },
+            metrics: {
+              type: "array",
+              items: { type: "string", enum: ["power", "energy", "voltage", "current"] },
+              description: "Metrics to include (default: all available). Power/voltage/current use averages, energy uses sum/delta.",
+            },
           },
           required: ["device_id"],
+        },
+      },
+      {
+        name: "fibaro_energy_graph",
+        description:
+          "Get historical energy/power data from Fibaro HC2 summary-graph API. Works for both devices and rooms. Returns time-series data aggregated by the HC2.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            from: {
+              type: "number",
+              description: "Start timestamp (Unix seconds)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp (Unix seconds)",
+            },
+            grouping: {
+              type: "string",
+              enum: ["devices", "rooms"],
+              description: "Group by devices or rooms (default: devices)",
+            },
+            property: {
+              type: "string",
+              enum: ["power", "energy"],
+              description: "Property to query (default: power)",
+            },
+            device_id: {
+              type: "number",
+              description: "Device ID (required if grouping=devices)",
+            },
+            room_id: {
+              type: "number",
+              description: "Room ID (required if grouping=rooms)",
+            },
+          },
+          required: ["from", "to"],
         },
       },
       {
@@ -1524,18 +1559,578 @@ export function getTools(): ListToolsResult {
           required: ["query"],
         },
       },
+      {
+        name: "fibaro_template",
+        description:
+          "Scene template management: list available templates, get template details, instantiate templates with parameters, add custom templates, or delete templates",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: list|get|instantiate|create|delete",
+              enum: ["list", "get", "instantiate", "create", "delete"],
+            },
+            category: {
+              type: "string",
+              description: "Filter templates by category (for op=list)",
+              enum: ["lighting", "security", "energy", "climate", "custom"],
+            },
+            template_id: {
+              type: "string",
+              description: "Template ID (required for op=get|instantiate|delete)",
+            },
+            scene_name: {
+              type: "string",
+              description: "Name for the new scene (required for op=instantiate)",
+            },
+            room_id: {
+              type: "number",
+              description: "Room ID for the new scene (required for op=instantiate)",
+            },
+            parameters: {
+              type: "object",
+              description:
+                "Template parameters as key-value pairs (required for op=instantiate). Parameter types: device_id (number), number, string, time (HH:MM format), boolean",
+            },
+            template: {
+              type: "object",
+              description: "Custom template definition (required for op=create)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_history",
+        description:
+          "Device state history: query historical device states, calculate statistics, aggregate data by time intervals, and export history",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: query|stats|aggregate|export",
+              enum: ["query", "stats", "aggregate", "export"],
+            },
+            device_id: {
+              type: "number",
+              description: "Device ID (required for all ops)",
+            },
+            from: {
+              type: "number",
+              description: "Start timestamp in milliseconds (Unix epoch)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp in milliseconds (Unix epoch)",
+            },
+            property: {
+              type: "string",
+              description: "Device property to query (e.g., 'value', 'power', 'temperature')",
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of entries to return (default: 1000)",
+            },
+            interval: {
+              type: "string",
+              description: "Time interval for aggregation (for op=aggregate)",
+              enum: ["5m", "15m", "1h", "6h", "1d", "1w"],
+            },
+            aggregation: {
+              type: "string",
+              description: "Aggregation function (for op=aggregate)",
+              enum: ["last", "avg", "min", "max", "sum", "count"],
+            },
+          },
+          required: ["op", "device_id"],
+        },
+      },
+      {
+        name: "fibaro_scene_history",
+        description:
+          "Scene execution history: track scene runs, analyze performance, calculate success rates and execution durations",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: query|stats|performance",
+              enum: ["query", "stats", "performance"],
+            },
+            scene_id: {
+              type: "number",
+              description: "Scene ID (optional - if not provided, returns all scenes)",
+            },
+            from: {
+              type: "number",
+              description: "Start timestamp in milliseconds (Unix epoch)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp in milliseconds (Unix epoch)",
+            },
+            status: {
+              type: "string",
+              description: "Filter by execution status",
+              enum: ["success", "failure", "timeout"],
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of entries to return (default: 1000)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_backup",
+        description:
+          "Comprehensive backup and restore: export Fibaro system configuration to JSON/YAML, validate imports, restore configurations",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: export|import|validate",
+              enum: ["export", "import", "validate"],
+            },
+            export_format: {
+              type: "string",
+              description: "Export/Import file format (default: json)",
+              enum: ["json", "yaml"],
+            },
+            include: {
+              type: "array",
+              description: "Data types to include in export",
+              items: {
+                type: "string",
+                enum: ["devices", "scenes", "rooms", "sections", "variables", "users"],
+              },
+            },
+            exclude: {
+              type: "array",
+              description: "Data types to exclude from export",
+              items: {
+                type: "string",
+                enum: ["devices", "scenes", "rooms", "sections", "variables", "users"],
+              },
+            },
+            include_users: {
+              type: "boolean",
+              description: "Include users in export (default: false for security)",
+            },
+            include_passwords: {
+              type: "boolean",
+              description: "Include passwords in user export (default: false)",
+            },
+            import_data: {
+              type: "string",
+              description: "JSON/YAML string of exported data for import/validate operations",
+            },
+            dry_run: {
+              type: "boolean",
+              description: "Validate import without making changes (default: false)",
+            },
+            skip_existing: {
+              type: "boolean",
+              description: "Skip items that already exist (default: false)",
+            },
+            update_existing: {
+              type: "boolean",
+              description: "Update existing items during import (default: false)",
+            },
+            import_types: {
+              type: "array",
+              description: "Data types to import (default: all)",
+              items: {
+                type: "string",
+                enum: ["devices", "scenes", "rooms", "sections", "variables", "users"],
+              },
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_bulk",
+        description:
+          "Bulk operations: execute batch actions on multiple devices matching query criteria (room, type, interface, name pattern, properties)",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: execute|preview",
+              enum: ["execute", "preview"],
+            },
+            query: {
+              type: "object",
+              description: "Device query criteria",
+              properties: {
+                device_ids: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Specific device IDs to target",
+                },
+                room_ids: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Filter by room IDs",
+                },
+                section_ids: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Filter by section IDs",
+                },
+                type: {
+                  type: "string",
+                  description: "Filter by device type",
+                },
+                base_type: {
+                  type: "string",
+                  description: "Filter by base type",
+                },
+                interface: {
+                  type: "string",
+                  description: "Filter by interface/capability",
+                },
+                name_pattern: {
+                  type: "string",
+                  description: "Filter by name pattern (regex)",
+                },
+                property: {
+                  type: "object",
+                  description: "Filter by property value",
+                  properties: {
+                    name: { type: "string" },
+                    value: {},
+                    operator: {
+                      type: "string",
+                      enum: ["==", "!=", ">", "<", ">=", "<="],
+                    },
+                  },
+                  required: ["name", "value"],
+                },
+                enabled: {
+                  type: "boolean",
+                  description: "Filter by enabled status",
+                },
+                visible: {
+                  type: "boolean",
+                  description: "Filter by visible status",
+                },
+              },
+            },
+            action: {
+              type: "object",
+              description: "Action to execute on matched devices",
+              properties: {
+                type: {
+                  type: "string",
+                  enum: ["device_action", "set_property", "update_config", "enable", "disable"],
+                  description: "Type of action",
+                },
+                action: {
+                  type: "string",
+                  description: "Action name (for device_action)",
+                },
+                args: {
+                  type: "array",
+                  description: "Action arguments (for device_action)",
+                },
+                property: {
+                  type: "string",
+                  description: "Property name (for set_property)",
+                },
+                value: {
+                  description: "Property value (for set_property)",
+                },
+                config: {
+                  type: "object",
+                  description: "Config updates (for update_config)",
+                },
+              },
+              required: ["type"],
+            },
+            options: {
+              type: "object",
+              description: "Operation options",
+              properties: {
+                dry_run: {
+                  type: "boolean",
+                  description: "Preview without executing (default: false)",
+                },
+                parallel: {
+                  type: "boolean",
+                  description: "Execute in parallel (default: false)",
+                },
+                concurrency: {
+                  type: "number",
+                  description: "Max parallel operations (default: 5)",
+                },
+                stop_on_error: {
+                  type: "boolean",
+                  description: "Stop on first error (default: false)",
+                },
+                rollback_on_error: {
+                  type: "boolean",
+                  description: "Rollback successful operations on error (default: false)",
+                },
+              },
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_repl",
+        description:
+          "Interactive Lua REPL: execute Lua code in sandboxed temporary scenes, manage REPL sessions, get execution output",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: execute|list_sessions|clear_session|clear_all|sync",
+              enum: ["execute", "list_sessions", "clear_session", "clear_all", "sync"],
+            },
+            code: {
+              type: "string",
+              description: "Lua code to execute (required for execute operation)",
+            },
+            session_id: {
+              type: "string",
+              description: "REPL session ID (optional - will create new session if not provided)",
+            },
+            timeout: {
+              type: "number",
+              description: "Execution timeout in milliseconds (default: 30000)",
+            },
+            room_id: {
+              type: "number",
+              description: "Room ID for new session scenes (default: 1)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_analytics",
+        description:
+          "Analytics and insights - USE THIS FOR OVERVIEWS instead of listing all devices/scenes. Operations: dashboard (comprehensive overview), system_health (quick health check), device_usage, energy_trends, scene_frequency, hourly_distribution, room_activity.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description:
+                "Operation: device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity",
+              enum: [
+                "device_usage",
+                "energy_trends",
+                "scene_frequency",
+                "system_health",
+                "dashboard",
+                "hourly_distribution",
+                "room_activity",
+              ],
+            },
+            from: {
+              type: "number",
+              description: "Start timestamp (default: 7 days ago)",
+            },
+            to: {
+              type: "number",
+              description: "End timestamp (default: now)",
+            },
+            device_ids: {
+              type: "array",
+              items: { type: "number" },
+              description: "Filter by device IDs",
+            },
+            scene_ids: {
+              type: "array",
+              items: { type: "number" },
+              description: "Filter by scene IDs",
+            },
+            room_ids: {
+              type: "array",
+              items: { type: "number" },
+              description: "Filter by room IDs",
+            },
+            group_by: {
+              type: "string",
+              enum: ["hour", "day", "week", "month"],
+              description: "Time grouping for trends (default: day)",
+            },
+            limit: {
+              type: "number",
+              description: "Limit number of results (default: all)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_integration",
+        description:
+          "External integrations: webhook server (HTTP endpoints) and MQTT bridge (pub/sub). Requires optional dependencies (express, mqtt).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: webhook_start|webhook_stop|webhook_status|mqtt_connect|mqtt_disconnect|mqtt_status|mqtt_publish",
+              enum: [
+                "webhook_start",
+                "webhook_stop",
+                "webhook_status",
+                "mqtt_connect",
+                "mqtt_disconnect",
+                "mqtt_status",
+                "mqtt_publish",
+              ],
+            },
+            webhook_config: {
+              type: "object",
+              description: "Webhook server configuration (for webhook_start)",
+              properties: {
+                port: { type: "number" },
+                host: { type: "string" },
+                authToken: { type: "string" },
+                routes: { type: "array" },
+              },
+            },
+            mqtt_config: {
+              type: "object",
+              description: "MQTT configuration (for mqtt_connect)",
+              properties: {
+                broker: { type: "string" },
+                clientId: { type: "string" },
+                username: { type: "string" },
+                password: { type: "string" },
+                subscriptions: { type: "array" },
+                publishState: { type: "boolean" },
+              },
+            },
+            topic: {
+              type: "string",
+              description: "MQTT topic (for mqtt_publish)",
+            },
+            message: {
+              type: "string",
+              description: "MQTT message payload (for mqtt_publish)",
+            },
+            qos: {
+              type: "number",
+              enum: [0, 1, 2],
+              description: "MQTT QoS level (for mqtt_publish)",
+            },
+          },
+          required: ["op"],
+        },
+      },
+      {
+        name: "fibaro_automation",
+        description:
+          "Advanced automation builder: create complex multi-step automations with conditions and actions, generate Fibaro Lua scenes",
+        inputSchema: {
+          type: "object",
+          properties: {
+            format: {
+              type: "string",
+              description: "Output format: text (default) or json (stringified MCP result)",
+            },
+            op: {
+              type: "string",
+              description: "Operation: create|validate|generate_lua",
+              enum: ["create", "validate", "generate_lua"],
+            },
+            automation: {
+              type: "object",
+              description: "Automation definition",
+              properties: {
+                name: { type: "string" },
+                description: { type: "string" },
+                conditions: { type: "object" },
+                actions: { type: "array" },
+                enabled: { type: "boolean" },
+              },
+              required: ["name", "conditions", "actions"],
+            },
+            deploy: {
+              type: "boolean",
+              description: "Deploy automation as Fibaro scene (for create operation)",
+            },
+          },
+          required: ["op"],
+        },
+      },
     ],
   };
 
+  // v3 tools that should be available in all toolsets
+  const v3ToolNames = new Set([
+    "fibaro_analytics",
+    "fibaro_history",
+    "fibaro_scene_history",
+    "fibaro_backup",
+    "fibaro_bulk",
+    "fibaro_template",
+    "fibaro_automation",
+    "fibaro_repl",
+    "fibaro_integration",
+  ]);
+  const v3Tools = legacy.tools.filter((t) => v3ToolNames.has(t.name));
+
+  let result: ListToolsResult;
+
   if (toolset === "legacy") {
-    return { tools: withFormat(legacy.tools) };
+    result = { tools: withFormat(legacy.tools) };
+  } else if (toolset === "both") {
+    result = { tools: withFormat([...intentTools.tools, ...legacy.tools]) };
+  } else {
+    // Default: intent toolset + v3 tools
+    result = { tools: withFormat([...intentTools.tools, ...v3Tools]) };
   }
 
-  if (toolset === "both") {
-    return { tools: withFormat([...intentTools.tools, ...legacy.tools]) };
-  }
-
-  return { tools: withFormat(legacy.tools) };
+  cachedTools = result;
+  cachedToolset = toolset;
+  return result;
 }
 
 export function handleFirstRun(args: any): CallToolResult {
@@ -1592,10 +2187,16 @@ export function getResources(): ListResourcesResult {
   return {
     resources: [
       {
+        uri: "fibaro://help",
+        mimeType: "text/plain",
+        name: "Usage Guide",
+        description: "READ THIS FIRST: Efficient tool usage guide to avoid large data transfers",
+      },
+      {
         uri: "fibaro://devices",
         mimeType: "application/json",
         name: "Devices",
-        description: "List of all devices in the system",
+        description: "List of all devices in the system (WARNING: 1MB+ - prefer fibaro_device with filters)",
       },
       {
         uri: "fibaro://rooms",
@@ -1607,7 +2208,7 @@ export function getResources(): ListResourcesResult {
         uri: "fibaro://scenes",
         mimeType: "application/json",
         name: "Scenes",
-        description: "List of all scenes in the system",
+        description: "List of all scenes in the system (WARNING: large - prefer fibaro_scene with filters)",
       },
       {
         uri: "fibaro://system",
@@ -1621,6 +2222,12 @@ export function getResources(): ListResourcesResult {
         name: "Weather",
         description: "Current weather information",
       },
+      {
+        uri: "fibaro://analytics/dashboard",
+        mimeType: "application/json",
+        name: "Analytics Dashboard",
+        description: "Comprehensive analytics dashboard with usage patterns, energy trends, and system health",
+      },
     ],
   };
 }
@@ -1632,6 +2239,69 @@ export async function handleResourceRead(
   let data: any;
 
   switch (uri) {
+    case "fibaro://help": {
+      const helpText = `# Fibaro MCP - Efficient Usage Guide
+
+## IMPORTANT: Avoid Large Data Transfers
+
+Do NOT start by listing all devices or scenes - these can be 1MB+ and waste context.
+
+## Quick Reference
+
+### For System Overview
+- fibaro_analytics op=dashboard       → Comprehensive overview
+- fibaro_analytics op=system_health   → Quick health check
+- fibaro_home op=energy_panel         → Current power consumption
+
+### For Specific Devices
+- fibaro_device op=get name="Kitchen Light"    → Get by name
+- fibaro_device op=list room_id=5              → Filter by room
+- fibaro_device op=control name="Lamp" action=turnOn
+
+### For Specific Scenes
+- fibaro_scene op=get name="Good Night"        → Get by name
+- fibaro_scene op=run name="Morning Routine"   → Run by name
+
+### For Energy/Power Data
+- fibaro_home op=energy_panel                  → Current consumption
+- fibaro_analytics op=energy_trends days=7     → Trends by room
+- get_device_stats device_id=42                → Device power history
+
+### For Variables
+- fibaro_variable op=get name=HomeMode
+- fibaro_variable op=set name=HomeMode value=away
+
+## Tool Summary
+
+| Tool | Best For |
+|------|----------|
+| fibaro_analytics | System overviews, health checks, trends |
+| fibaro_device | Control specific devices (use name param) |
+| fibaro_scene | Run/manage specific scenes (use name param) |
+| fibaro_home | System info, weather, energy panel |
+| fibaro_variable | Global variables |
+| fibaro_bulk | Bulk operations on multiple devices |
+| fibaro_template | Scene templates |
+| fibaro_automation | Create automations |
+
+## What NOT To Do
+
+- fibaro://devices           → 1MB+ of data
+- fibaro_device op=list      → Without filters = huge response
+- fibaro_scene op=list       → Without filters = large response
+
+Always use name-based lookups or filters!`;
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/plain",
+            text: helpText,
+          },
+        ],
+      };
+    }
     case "fibaro://devices": {
       data = await client.getDevices();
       break;
@@ -1650,6 +2320,26 @@ export async function handleResourceRead(
     }
     case "fibaro://weather": {
       data = await client.getWeather();
+      break;
+    }
+    case "fibaro://analytics/dashboard": {
+      const { getAnalyticsEngine } = await import("./history/analytics-engine.js");
+      const analytics = getAnalyticsEngine();
+
+      // Parse query parameters from URI
+      const url = new URL(uri, "fibaro://dummy");
+      const period = url.searchParams.get("period");
+
+      let options = {};
+      if (period) {
+        const days = period === "30d" ? 30 : period === "14d" ? 14 : 7;
+        options = {
+          from: Date.now() - days * 24 * 3600000,
+          to: Date.now(),
+        };
+      }
+
+      data = await analytics.generateDashboard(client, options);
       break;
     }
     default:
@@ -1685,25 +2375,28 @@ async function handleToolCallInternal(
       case "list":
         return handleToolCall(client, "list_devices", args);
       case "get":
-        return handleToolCall(client, "get_device", { device_id: args?.device_id });
+        return handleToolCall(client, "get_device", { device_id: args?.device_id, name: args?.name });
       case "action":
         return handleToolCall(client, "control_device", {
           device_id: args?.device_id,
+          name: args?.name,
           action: args?.action,
           args: args?.args,
         });
       case "turn_on":
-        return handleToolCall(client, "turn_on", { device_id: args?.device_id });
+        return handleToolCall(client, "turn_on", { device_id: args?.device_id, name: args?.name });
       case "turn_off":
-        return handleToolCall(client, "turn_off", { device_id: args?.device_id });
+        return handleToolCall(client, "turn_off", { device_id: args?.device_id, name: args?.name });
       case "set_brightness":
         return handleToolCall(client, "set_brightness", {
           device_id: args?.device_id,
+          name: args?.name,
           level: args?.level,
         });
       case "set_color":
         return handleToolCall(client, "set_color", {
           device_id: args?.device_id,
+          name: args?.name,
           r: args?.r,
           g: args?.g,
           b: args?.b,
@@ -1712,12 +2405,13 @@ async function handleToolCallInternal(
       case "set_temperature":
         return handleToolCall(client, "set_temperature", {
           device_id: args?.device_id,
+          name: args?.name,
           temperature: args?.temperature,
         });
       case "delete":
-        return handleToolCall(client, "delete_device", { device_id: args?.device_id });
+        return handleToolCall(client, "delete_device", { device_id: args?.device_id, name: args?.name });
       case "get_lua":
-        return handleToolCall(client, "get_device_lua", { device_id: args?.device_id });
+        return handleToolCall(client, "get_device_lua", { device_id: args?.device_id, name: args?.name });
       default:
         return {
           content: [
@@ -1726,6 +2420,7 @@ async function handleToolCallInternal(
               text: `fibaro_device: unsupported op "${op}". Supported ops: list|get|action|turn_on|turn_off|set_brightness|set_color|set_temperature|delete|get_lua`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -1739,11 +2434,11 @@ async function handleToolCallInternal(
       case "list":
         return handleToolCall(client, "list_scenes", { room_id: args?.room_id });
       case "get":
-        return handleToolCall(client, "get_scene", { scene_id: args?.scene_id });
+        return handleToolCall(client, "get_scene", { scene_id: args?.scene_id, name: args?.name });
       case "run":
-        return handleToolCall(client, "run_scene", { scene_id: args?.scene_id });
+        return handleToolCall(client, "run_scene", { scene_id: args?.scene_id, name: args?.name });
       case "stop":
-        return handleToolCall(client, "stop_scene", { scene_id: args?.scene_id });
+        return handleToolCall(client, "stop_scene", { scene_id: args?.scene_id, name: args?.name });
       case "get_lua":
         return handleToolCall(client, "get_scene_lua", { scene_id: args?.scene_id });
       case "create":
@@ -1769,6 +2464,7 @@ async function handleToolCallInternal(
               text: `fibaro_scene: unsupported op "${op}". Supported ops: list|get|run|stop|get_lua|create|update_lua|delete`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -1807,6 +2503,7 @@ async function handleToolCallInternal(
               text: `fibaro_variable: unsupported op "${op}". Supported ops: list|get|set|create|delete`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -1851,6 +2548,7 @@ async function handleToolCallInternal(
               text: `fibaro_quick_app: unsupported op "${op}". Supported ops: list|create|update_code|update_variables|get_lua|delete`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -2001,19 +2699,1834 @@ async function handleToolCallInternal(
           event_name: args?.event_name,
           data: args?.data,
         });
-      case "device_stats":
+      case "device_stats": {
+        // Support both direct params and nested params object for backward compatibility
+        const params = (args?.params as Record<string, any>) || {};
         return handleToolCall(client, "get_device_stats", {
           device_id: args?.device_id,
-          params: args?.params,
+          from: args?.from ?? params.from,
+          to: args?.to ?? params.to,
+          property: args?.property ?? params.property,
+          aggregation: args?.aggregation ?? params.aggregation,
+          max_points: args?.max_points ?? params.max_points,
+          metrics: args?.metrics ?? params.metrics,
         });
+      }
+      case "energy_graph": {
+        return handleToolCall(client, "fibaro_energy_graph", {
+          from: args?.from,
+          to: args?.to,
+          grouping: args?.grouping,
+          property: args?.property,
+          device_id: args?.device_id,
+          room_id: args?.room_id,
+        });
+      }
       default:
         return {
           content: [
             {
               type: "text",
-              text: `fibaro_home: unsupported op "${op}". Supported ops include: system_info|weather|energy_panel|rooms|sections|...|device_stats`,
+              text: `fibaro_home: unsupported op "${op}". Supported ops include: system_info|weather|energy_graph|rooms|sections|...|device_stats`,
             },
           ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_template") {
+    const { getTemplateManager } = await import("./templates/template-manager.js");
+    const templateManager = getTemplateManager();
+
+    const op = (args?.op as string | undefined)?.toLowerCase();
+    if (!op) {
+      throw new McpError(ErrorCode.InvalidParams, 'fibaro_template: missing required parameter "op"');
+    }
+
+    switch (op) {
+      case "list": {
+        const category = args?.category as string | undefined;
+        const templates = category
+          ? templateManager.getByCategory(category as any)
+          : templateManager.getAll();
+
+        const library = templateManager.getLibrary();
+
+        let text = `Found ${templates.length} template(s)`;
+        if (category) {
+          text += ` in category: ${category}`;
+        }
+        text += `\n\nTotal templates by category:`;
+        for (const [cat, count] of Object.entries(library.categories)) {
+          text += `\n  ${cat}: ${count}`;
+        }
+
+        text += `\n\nTemplates:\n`;
+        for (const template of templates) {
+          text += `\n- ${template.id} (${template.name})`;
+          text += `\n  Category: ${template.category}`;
+          text += `\n  Description: ${template.description}`;
+          text += `\n  Parameters: ${template.parameters.length}`;
+          if (template.tags && template.tags.length > 0) {
+            text += `\n  Tags: ${template.tags.join(", ")}`;
+          }
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "get": {
+        const templateId = args?.template_id as string | undefined;
+        if (!templateId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=get: missing required parameter "template_id"',
+          );
+        }
+
+        const template = templateManager.getById(templateId);
+        if (!template) {
+          return {
+            content: [{ type: "text", text: `Template '${templateId}' not found` }],
+          };
+        }
+
+        let text = `Template: ${template.name} (${template.id})\n`;
+        text += `Category: ${template.category}\n`;
+        text += `Version: ${template.version}\n`;
+        text += `Description: ${template.description}\n`;
+        if (template.author) {
+          text += `Author: ${template.author}\n`;
+        }
+        if (template.tags && template.tags.length > 0) {
+          text += `Tags: ${template.tags.join(", ")}\n`;
+        }
+
+        text += `\nParameters:\n`;
+        for (const param of template.parameters) {
+          text += `\n- ${param.name} (${param.type})${param.required ? " [REQUIRED]" : ""}`;
+          text += `\n  ${param.description}`;
+          if (param.default !== undefined) {
+            text += `\n  Default: ${JSON.stringify(param.default)}`;
+          }
+          if (param.validation) {
+            if (param.validation.min !== undefined) text += `\n  Min: ${param.validation.min}`;
+            if (param.validation.max !== undefined) text += `\n  Max: ${param.validation.max}`;
+            if (param.validation.pattern) text += `\n  Pattern: ${param.validation.pattern}`;
+          }
+        }
+
+        text += `\n\nLua Template:\n${template.lua_template}`;
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "instantiate": {
+        const templateId = args?.template_id as string | undefined;
+        const sceneName = args?.scene_name as string | undefined;
+        const roomId = args?.room_id as number | undefined;
+        const parameters = args?.parameters as Record<string, any> | undefined;
+
+        if (!templateId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "template_id"',
+          );
+        }
+        if (!sceneName) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "scene_name"',
+          );
+        }
+        if (!roomId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "room_id"',
+          );
+        }
+        if (!parameters) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=instantiate: missing required parameter "parameters"',
+          );
+        }
+
+        const result = templateManager.instantiate({
+          template_id: templateId,
+          scene_name: sceneName,
+          room_id: roomId,
+          parameters,
+        });
+
+        if (!result.validation.valid) {
+          let text = `Template parameter validation failed:\n`;
+          for (const error of result.validation.errors) {
+            text += `\n- ${error.parameter}: ${error.message}`;
+          }
+          return {
+            content: [{ type: "text", text }],
+          };
+        }
+
+        // Create the scene using the generated Lua code
+        try {
+          const scene = await client.createScene({
+            name: sceneName,
+            roomID: roomId,
+            lua: result.lua,
+            type: "lua",
+            isLua: true,
+          });
+
+          let text = `Successfully created scene from template!\n`;
+          text += `Scene ID: ${scene.id}\n`;
+          text += `Scene Name: ${scene.name}\n`;
+          text += `Room ID: ${scene.roomID}\n`;
+          text += `\nGenerated Lua code (${result.lua.length} characters):\n${result.lua}`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error: any) {
+          throw new McpError(
+            ErrorCode.InternalError,
+            `Failed to create scene: ${error.message}`,
+          );
+        }
+      }
+
+      case "create": {
+        const template = args?.template as any;
+        if (!template) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=create: missing required parameter "template"',
+          );
+        }
+
+        const result = templateManager.addTemplate(template);
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `Failed to add template: ${result.error}` }],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully added custom template: ${template.id} (${template.name})`,
+            },
+          ],
+        };
+      }
+
+      case "delete": {
+        const templateId = args?.template_id as string | undefined;
+        if (!templateId) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_template op=delete: missing required parameter "template_id"',
+          );
+        }
+
+        const result = templateManager.removeTemplate(templateId);
+        if (!result.success) {
+          return {
+            content: [{ type: "text", text: `Failed to remove template: ${result.error}` }],
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: `Successfully removed template: ${templateId}` }],
+        };
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_template: unsupported op "${op}". Supported ops: list|get|instantiate|create|delete`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_history") {
+    const { getHistoryManager } = await import("./history/history-manager.js");
+    const historyManager = getHistoryManager();
+
+    const op = (args?.op as string | undefined)?.toLowerCase();
+    if (!op) {
+      throw new McpError(ErrorCode.InvalidParams, 'fibaro_history: missing required parameter "op"');
+    }
+
+    const deviceId = args?.device_id as number | undefined;
+    if (!deviceId) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'fibaro_history: missing required parameter "device_id"',
+      );
+    }
+
+    const from = args?.from as number | undefined;
+    const to = args?.to as number | undefined;
+    const property = args?.property as string | undefined;
+    const limit = args?.limit as number | undefined;
+
+    switch (op) {
+      case "query": {
+        const entries = await historyManager.queryDeviceHistory(client, {
+          deviceId,
+          from,
+          to,
+          property,
+          limit,
+        });
+
+        let text = `Device History for Device ${deviceId}\n`;
+        if (property) {
+          text += `Property: ${property}\n`;
+        }
+        text += `Found ${entries.length} entries\n`;
+
+        if (from || to) {
+          text += `Time range: ${from ? new Date(from).toISOString() : "beginning"} to ${to ? new Date(to).toISOString() : "now"}\n`;
+        }
+
+        text += `\nHistory Entries:\n`;
+        for (const entry of entries.slice(0, 50)) {
+          text += `\n- ${new Date(entry.timestamp).toISOString()}`;
+          text += ` | ${entry.property}: ${JSON.stringify(entry.value)}`;
+          if (entry.oldValue !== undefined) {
+            text += ` (was: ${JSON.stringify(entry.oldValue)})`;
+          }
+        }
+
+        if (entries.length > 50) {
+          text += `\n\n... and ${entries.length - 50} more entries`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "stats": {
+        const entries = await historyManager.queryDeviceHistory(client, {
+          deviceId,
+          from,
+          to,
+          property,
+          limit,
+        });
+
+        const stats = historyManager.calculateStats(
+          entries,
+          deviceId,
+          property || "value",
+          from || 0,
+          to || Date.now(),
+        );
+
+        let text = `Device History Statistics for Device ${deviceId}\n`;
+        if (stats.deviceName) {
+          text += `Device Name: ${stats.deviceName}\n`;
+        }
+        text += `Property: ${stats.property}\n`;
+        text += `Time range: ${new Date(stats.from).toISOString()} to ${new Date(stats.to).toISOString()}\n`;
+        text += `\nStatistics:\n`;
+        text += `  Total entries: ${stats.count}\n`;
+        text += `  Value changes: ${stats.changes}\n`;
+        text += `  First value: ${JSON.stringify(stats.first)}\n`;
+        text += `  Last value: ${JSON.stringify(stats.last)}\n`;
+
+        if (stats.min !== undefined) {
+          text += `  Minimum: ${stats.min}\n`;
+          text += `  Maximum: ${stats.max}\n`;
+          text += `  Average: ${stats.avg?.toFixed(2)}\n`;
+          text += `  Sum: ${stats.sum}\n`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "aggregate": {
+        const interval = args?.interval as any;
+        const aggregation = args?.aggregation as any;
+
+        if (!interval) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_history op=aggregate: missing required parameter "interval"',
+          );
+        }
+        if (!aggregation) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_history op=aggregate: missing required parameter "aggregation"',
+          );
+        }
+
+        const entries = await historyManager.queryDeviceHistory(client, {
+          deviceId,
+          from,
+          to,
+          property,
+          limit,
+        });
+
+        const aggregated = historyManager.aggregateByInterval(entries, interval, aggregation);
+
+        let text = `Aggregated Device History for Device ${deviceId}\n`;
+        text += `Interval: ${interval}, Aggregation: ${aggregation}\n`;
+        text += `Found ${aggregated.length} aggregated entries\n\n`;
+
+        for (const entry of aggregated.slice(0, 100)) {
+          text += `\n- ${new Date(entry.timestamp).toISOString()}`;
+          text += ` | ${entry.property}: ${entry.value.toFixed(2)}`;
+          text += ` (${entry.count} samples)`;
+          if (entry.min !== undefined) {
+            text += ` [min: ${entry.min.toFixed(2)}, max: ${entry.max?.toFixed(2)}, avg: ${entry.avg?.toFixed(2)}]`;
+          }
+        }
+
+        if (aggregated.length > 100) {
+          text += `\n\n... and ${aggregated.length - 100} more entries`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "export": {
+        const exportData = await historyManager.exportHistory(
+          client,
+          {
+            deviceId,
+            from,
+            to,
+            property,
+            limit,
+          },
+          true,
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(exportData, null, 2),
+            },
+          ],
+        };
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_history: unsupported op "${op}". Supported ops: query|stats|aggregate|export`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_scene_history") {
+    const { getHistoryManager } = await import("./history/history-manager.js");
+    const historyManager = getHistoryManager();
+
+    const op = (args?.op as string | undefined)?.toLowerCase();
+    if (!op) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'fibaro_scene_history: missing required parameter "op"',
+      );
+    }
+
+    const sceneId = args?.scene_id as number | undefined;
+    const from = args?.from as number | undefined;
+    const to = args?.to as number | undefined;
+    const status = args?.status as any;
+    const limit = args?.limit as number | undefined;
+
+    switch (op) {
+      case "query": {
+        const executions = await historyManager.querySceneHistory(client, {
+          sceneId,
+          from,
+          to,
+          status,
+          limit,
+        });
+
+        let text = `Scene Execution History\n`;
+        if (sceneId) {
+          text += `Scene ID: ${sceneId}\n`;
+        }
+        text += `Found ${executions.length} executions\n`;
+
+        if (from || to) {
+          text += `Time range: ${from ? new Date(from).toISOString() : "beginning"} to ${to ? new Date(to).toISOString() : "now"}\n`;
+        }
+
+        text += `\nExecutions:\n`;
+        for (const exec of executions.slice(0, 50)) {
+          text += `\n- Scene ${exec.sceneId} (${exec.sceneName})`;
+          text += `\n  Started: ${new Date(exec.startTime).toISOString()}`;
+          if (exec.endTime) {
+            text += `\n  Ended: ${new Date(exec.endTime).toISOString()}`;
+            text += `\n  Duration: ${exec.duration}ms`;
+          }
+          text += `\n  Status: ${exec.status}`;
+          if (exec.error) {
+            text += `\n  Error: ${exec.error}`;
+          }
+        }
+
+        if (executions.length > 50) {
+          text += `\n\n... and ${executions.length - 50} more executions`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "stats":
+      case "performance": {
+        const executions = await historyManager.querySceneHistory(client, {
+          sceneId,
+          from,
+          to,
+          limit,
+        });
+
+        if (sceneId) {
+          // Single scene stats
+          const stats = historyManager.calculateSceneStats(executions);
+          if (!stats) {
+            return {
+              content: [{ type: "text", text: "No execution data found for this scene" }],
+            };
+          }
+
+          let text = `Scene Performance Statistics\n`;
+          text += `Scene ID: ${stats.sceneId}\n`;
+          text += `Scene Name: ${stats.sceneName}\n\n`;
+          text += `Total Executions: ${stats.totalExecutions}\n`;
+          text += `Successful: ${stats.successfulExecutions} (${stats.successRate.toFixed(1)}%)\n`;
+          text += `Failed: ${stats.failedExecutions}\n\n`;
+          text += `Execution Duration:\n`;
+          text += `  Average: ${stats.avgDuration.toFixed(0)}ms\n`;
+          text += `  Minimum: ${stats.minDuration}ms\n`;
+          text += `  Maximum: ${stats.maxDuration}ms\n\n`;
+          text += `Last Execution: ${new Date(stats.lastExecution).toISOString()}\n`;
+          if (stats.lastStatus) {
+            text += `Last Status: ${stats.lastStatus}\n`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } else {
+          // Multi-scene stats
+          const sceneMap = new Map<number, any[]>();
+          for (const exec of executions) {
+            if (!sceneMap.has(exec.sceneId)) {
+              sceneMap.set(exec.sceneId, []);
+            }
+            sceneMap.get(exec.sceneId)!.push(exec);
+          }
+
+          let text = `Scene Performance Statistics (All Scenes)\n`;
+          text += `Total scenes: ${sceneMap.size}\n\n`;
+
+          for (const [sid, execs] of Array.from(sceneMap.entries()).slice(0, 20)) {
+            const stats = historyManager.calculateSceneStats(execs);
+            if (stats) {
+              text += `\n${stats.sceneName} (ID: ${stats.sceneId})\n`;
+              text += `  Executions: ${stats.totalExecutions}, Success rate: ${stats.successRate.toFixed(1)}%\n`;
+              text += `  Avg duration: ${stats.avgDuration.toFixed(0)}ms\n`;
+            }
+          }
+
+          if (sceneMap.size > 20) {
+            text += `\n\n... and ${sceneMap.size - 20} more scenes`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_scene_history: unsupported op "${op}". Supported ops: query|stats|performance`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_backup") {
+    const { getBackupManager } = await import("./backup/backup-manager.js");
+    const { getExportFormatter } = await import("./backup/export-formatter.js");
+    const { getImportValidator } = await import("./backup/import-validator.js");
+
+    const backupManager = getBackupManager();
+    const exportFormatter = getExportFormatter();
+    const importValidator = getImportValidator();
+
+    const extracted = extractOp("fibaro_backup", args, "export|validate|import");
+    if ("error" in extracted) return extracted.error;
+    const op = extracted.op;
+
+    switch (op) {
+      case "export": {
+        const exportFormat = (args?.export_format as string) || "json";
+        type DataType = "devices" | "scenes" | "rooms" | "sections" | "variables" | "users";
+        const include = args?.include as DataType[] | undefined;
+        const exclude = args?.exclude as DataType[] | undefined;
+        const includeUsers = args?.include_users as boolean | undefined;
+        const includePasswords = args?.include_passwords as boolean | undefined;
+
+        const exportData = await backupManager.exportSystem(client, {
+          format: exportFormat === "yaml" ? "yaml" : "json",
+          include,
+          exclude,
+          include_users: includeUsers,
+          include_passwords: includePasswords,
+        });
+
+        const formatted = await exportFormatter.format(
+          exportData,
+          exportFormat === "yaml" ? "yaml" : "json"
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `System export complete\n\n` +
+                `Metadata:\n` +
+                `- Devices: ${exportData.metadata.device_count}\n` +
+                `- Scenes: ${exportData.metadata.scene_count}\n` +
+                `- Rooms: ${exportData.metadata.room_count}\n` +
+                `- Sections: ${exportData.metadata.section_count}\n` +
+                `- Variables: ${exportData.metadata.variable_count}\n` +
+                `- Users: ${exportData.metadata.user_count}\n` +
+                `- Export Duration: ${exportData.metadata.export_duration_ms}ms\n\n` +
+                `Export Data (${exportFormat}):\n\`\`\`${exportFormat}\n${formatted}\n\`\`\``,
+            },
+          ],
+        };
+      }
+
+      case "validate": {
+        const importData = args?.import_data as string | undefined;
+        if (!importData) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_backup: "validate" operation requires "import_data" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          // Detect format
+          const format = exportFormatter.detectFormat(importData);
+
+          // Parse import data
+          const exportData = await exportFormatter.parse(importData, format);
+
+          // Validate
+          const validationResult = importValidator.validate(exportData);
+
+          let text = `Import validation ${validationResult.valid ? "PASSED" : "FAILED"}\n\n`;
+
+          if (validationResult.metadata) {
+            text +=
+              `Metadata:\n` +
+              `- Devices: ${validationResult.metadata.device_count}\n` +
+              `- Scenes: ${validationResult.metadata.scene_count}\n` +
+              `- Rooms: ${validationResult.metadata.room_count}\n` +
+              `- Sections: ${validationResult.metadata.section_count}\n` +
+              `- Variables: ${validationResult.metadata.variable_count}\n` +
+              `- Users: ${validationResult.metadata.user_count}\n\n`;
+          }
+
+          if (validationResult.errors.length > 0) {
+            text += `Errors (${validationResult.errors.length}):\n`;
+            for (const error of validationResult.errors) {
+              text += `- [${error.type}] ${error.field ? `${error.field}: ` : ""}${error.message}\n`;
+            }
+            text += "\n";
+          }
+
+          if (validationResult.warnings.length > 0) {
+            text += `Warnings (${validationResult.warnings.length}):\n`;
+            for (const warning of validationResult.warnings) {
+              text += `- [${warning.type}] ${warning.field ? `${warning.field}: ` : ""}${warning.message}\n`;
+            }
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_backup: validation failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "import": {
+        const importData = args?.import_data as string | undefined;
+        if (!importData) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_backup: "import" operation requires "import_data" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          // Detect format
+          const format = exportFormatter.detectFormat(importData);
+
+          // Parse import data
+          const exportData = await exportFormatter.parse(importData, format);
+
+          // Validate first
+          const validationResult = importValidator.validate(exportData);
+          if (!validationResult.valid) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `fibaro_backup: import validation failed\n\n` +
+                    validationResult.errors.map((e) => `- ${e.message}`).join("\n"),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // Import
+          type ImportDataType = "devices" | "scenes" | "rooms" | "sections" | "variables" | "users";
+          const importResult = await backupManager.importSystem(client, exportData, {
+            dry_run: args?.dry_run as boolean | undefined,
+            skip_existing: args?.skip_existing as boolean | undefined,
+            update_existing: args?.update_existing as boolean | undefined,
+            types: args?.import_types as ImportDataType[] | undefined,
+          });
+
+          let text = `System import ${importResult.success ? "COMPLETED" : "FAILED"}\n\n`;
+
+          text +=
+            `Imported:\n` +
+            `- Devices: ${importResult.imported.devices}\n` +
+            `- Scenes: ${importResult.imported.scenes}\n` +
+            `- Rooms: ${importResult.imported.rooms}\n` +
+            `- Sections: ${importResult.imported.sections}\n` +
+            `- Variables: ${importResult.imported.variables}\n` +
+            `- Users: ${importResult.imported.users}\n\n`;
+
+          if (
+            importResult.skipped.devices > 0 ||
+            importResult.skipped.scenes > 0 ||
+            importResult.skipped.rooms > 0 ||
+            importResult.skipped.sections > 0 ||
+            importResult.skipped.variables > 0 ||
+            importResult.skipped.users > 0
+          ) {
+            text +=
+              `Skipped:\n` +
+              `- Devices: ${importResult.skipped.devices}\n` +
+              `- Scenes: ${importResult.skipped.scenes}\n` +
+              `- Rooms: ${importResult.skipped.rooms}\n` +
+              `- Sections: ${importResult.skipped.sections}\n` +
+              `- Variables: ${importResult.skipped.variables}\n` +
+              `- Users: ${importResult.skipped.users}\n\n`;
+          }
+
+          if (importResult.errors.length > 0) {
+            text += `Errors (${importResult.errors.length}):\n`;
+            for (const error of importResult.errors.slice(0, 10)) {
+              text += `- [${error.type}] ${error.name || error.id || "unknown"}: ${error.error}\n`;
+            }
+            if (importResult.errors.length > 10) {
+              text += `... and ${importResult.errors.length - 10} more errors\n`;
+            }
+            text += "\n";
+          }
+
+          text += `Duration: ${importResult.duration_ms}ms`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_backup: import failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_backup: unsupported op "${op}". Supported ops: export|import|validate`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_bulk") {
+    const { getBulkOperationsManager } = await import("./bulk/bulk-operations.js");
+    const bulkOps = getBulkOperationsManager();
+
+    const extractedBulk = extractOp("fibaro_bulk", args, "execute|preview");
+    if ("error" in extractedBulk) return extractedBulk.error;
+    const op = extractedBulk.op;
+
+    switch (op) {
+      case "execute": {
+        const query = args?.query as any;
+        const action = args?.action as any;
+        const options = (args?.options as any) || {};
+
+        if (!query) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_bulk: "execute" operation requires "query" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        if (!action) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_bulk: "execute" operation requires "action" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const result = await bulkOps.executeBulkOperation(client, query, action, options);
+
+          let text = `Bulk Operation ${result.failed > 0 ? "COMPLETED WITH ERRORS" : "SUCCESSFUL"}\n\n`;
+
+          text +=
+            `Summary:\n` +
+            `- Total devices: ${result.total}\n` +
+            `- Successful: ${result.successful}\n` +
+            `- Failed: ${result.failed}\n` +
+            `- Skipped: ${result.skipped}\n` +
+            `- Duration: ${result.duration}ms\n\n`;
+
+          if (result.successful > 0) {
+            text += `Successful Operations (${result.successful}):\n`;
+            const successful = result.results.filter((r) => r.success);
+            for (const r of successful.slice(0, 10)) {
+              text += `✓ [${r.deviceId}] ${r.deviceName}`;
+              if (r.value !== undefined) {
+                text += ` → ${r.value}`;
+              }
+              text += "\n";
+            }
+            if (successful.length > 10) {
+              text += `... and ${successful.length - 10} more\n`;
+            }
+            text += "\n";
+          }
+
+          if (result.failed > 0) {
+            text += `Failed Operations (${result.failed}):\n`;
+            const failed = result.results.filter((r) => !r.success);
+            for (const r of failed.slice(0, 10)) {
+              text += `✗ [${r.deviceId}] ${r.deviceName}: ${r.error}\n`;
+            }
+            if (failed.length > 10) {
+              text += `... and ${failed.length - 10} more\n`;
+            }
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_bulk: execute failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "preview": {
+        const query = args?.query as any;
+
+        if (!query) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_bulk: "preview" operation requires "query" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const devices = await bulkOps.previewQuery(client, query);
+
+          let text = `Preview: ${devices.length} devices match query\n\n`;
+
+          if (devices.length > 0) {
+            text += "Matching Devices:\n";
+            for (const device of devices.slice(0, 20)) {
+              text +=
+                `- [${device.id}] ${device.name} (${device.type}, Room ${device.roomID}, ${device.enabled ? "enabled" : "disabled"})\n`;
+            }
+            if (devices.length > 20) {
+              text += `... and ${devices.length - 20} more\n`;
+            }
+          } else {
+            text += "No devices match the query criteria.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_bulk: preview failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_bulk: unsupported op "${op}". Supported ops: execute|preview`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_repl") {
+    const { getLuaRepl } = await import("./repl/lua-repl.js");
+    const repl = getLuaRepl();
+
+    const extractedRepl = extractOp("fibaro_repl", args, "execute|preview|list_sessions|clear_session|clear_all|sync");
+    if ("error" in extractedRepl) return extractedRepl.error;
+    const op = extractedRepl.op;
+
+    switch (op) {
+      case "execute": {
+        const code = args?.code as string | undefined;
+        if (!code) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_repl: "execute" operation requires "code" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const sessionId = args?.session_id as string | undefined;
+        const timeout = args?.timeout as number | undefined;
+        const roomId = args?.room_id as number | undefined;
+
+        const result = await repl.execute(client, code, sessionId, {
+          timeout,
+          roomId,
+        });
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Lua execution failed\n\n` +
+                  `Session: ${result.sessionId}\n` +
+                  `Execution Time: ${result.executionTime}ms\n\n` +
+                  `Error:\n${result.error || "Unknown error"}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        let text = `Lua execution successful\n\n` +
+          `Session: ${result.sessionId}\n` +
+          `Scene: ${result.sceneId}\n` +
+          `Execution Time: ${result.executionTime}ms\n`;
+
+        if (result.output) {
+          text += `\nOutput:\n${result.output}`;
+        } else {
+          text += `\nNo output captured`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "list_sessions": {
+        const sessions = repl.listSessions();
+
+        if (sessions.length === 0) {
+          return {
+            content: [{ type: "text", text: "No active REPL sessions" }],
+          };
+        }
+
+        let text = `Active REPL Sessions (${sessions.length}):\n\n`;
+
+        for (const session of sessions) {
+          const age = Date.now() - session.createdAt;
+          const inactive = Date.now() - session.lastUsed;
+
+          text +=
+            `Session: ${session.id}\n` +
+            `Scene: ${session.sceneId} (${session.sceneName})\n` +
+            `Created: ${new Date(session.createdAt).toISOString()}\n` +
+            `Age: ${Math.floor(age / 1000)}s\n` +
+            `Inactive: ${Math.floor(inactive / 1000)}s\n` +
+            `Executions: ${session.executionCount}\n` +
+            `Status: ${session.status}\n\n`;
+        }
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+
+      case "clear_session": {
+        const sessionId = args?.session_id as string | undefined;
+        if (!sessionId) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_repl: "clear_session" operation requires "session_id" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          await repl.clearSession(client, sessionId);
+          return {
+            content: [
+              { type: "text", text: `REPL session ${sessionId} cleared successfully` },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to clear session: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "clear_all": {
+        try {
+          await repl.clearAllSessions(client);
+          return {
+            content: [{ type: "text", text: "All REPL sessions cleared successfully" }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to clear all sessions: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "sync": {
+        try {
+          await repl.sync(client);
+          return {
+            content: [
+              {
+                type: "text",
+                text: "REPL sessions synced with Fibaro successfully",
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to sync sessions: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_repl: unsupported op "${op}". Supported ops: execute|list_sessions|clear_session|clear_all|sync`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_analytics") {
+    const { getAnalyticsEngine } = await import("./history/analytics-engine.js");
+    const analytics = getAnalyticsEngine();
+
+    const extractedAnalytics = extractOp("fibaro_analytics", args, "device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity");
+    if ("error" in extractedAnalytics) return extractedAnalytics.error;
+    const op = extractedAnalytics.op;
+
+    const options = {
+      from: args?.from as number | undefined,
+      to: args?.to as number | undefined,
+      device_ids: args?.device_ids as number[] | undefined,
+      scene_ids: args?.scene_ids as number[] | undefined,
+      room_ids: args?.room_ids as number[] | undefined,
+      group_by: args?.group_by as "hour" | "day" | "week" | "month" | undefined,
+      limit: args?.limit as number | undefined,
+    };
+
+    switch (op) {
+      case "device_usage": {
+        try {
+          const patterns = await analytics.analyzeDeviceUsage(client, options);
+
+          let text = `Device Usage Analysis\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Total devices: ${patterns.length}\n\n`;
+
+          if (patterns.length > 0) {
+            text += "Top Devices by Activity:\n";
+            for (const pattern of patterns.slice(0, 20)) {
+              text +=
+                `\n${pattern.deviceName} [${pattern.deviceId}]\n` +
+                `  Type: ${pattern.deviceType}\n` +
+                `  Activations: ${pattern.activations}\n` +
+                `  Avg/day: ${pattern.avgDailyUsage.toFixed(2)}\n` +
+                `  Peak hours: ${pattern.peakHours.join(", ")}\n` +
+                `  Last active: ${new Date(pattern.lastActive).toISOString()}\n`;
+            }
+            if (patterns.length > 20) {
+              text += `\n... and ${patterns.length - 20} more devices`;
+            }
+          } else {
+            text += "No device activity found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: device_usage failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "energy_trends": {
+        try {
+          const trends = await analytics.analyzeEnergyTrends(client, options);
+
+          let text = `Energy Consumption Trends\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Group by: ${options.group_by || "day"}\n`;
+          text += `Intervals: ${trends.length}\n\n`;
+
+          if (trends.length > 0) {
+            const totalConsumption = trends.reduce((sum, t) => sum + t.totalConsumption, 0);
+            text += `Total Consumption: ${totalConsumption.toFixed(2)} kWh\n\n`;
+
+            text += "Trends:\n";
+            for (const trend of trends.slice(0, 10)) {
+              text +=
+                `\n${new Date(trend.timestamp).toISOString()}\n` +
+                `  Total: ${trend.totalConsumption.toFixed(2)} kWh\n` +
+                `  Top consumers: ${trend.devices.slice(0, 3).map((d) => `${d.deviceName} (${d.consumption.toFixed(2)} kWh)`).join(", ")}\n`;
+            }
+            if (trends.length > 10) {
+              text += `\n... and ${trends.length - 10} more intervals`;
+            }
+          } else {
+            text += "No energy data found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: energy_trends failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "scene_frequency": {
+        try {
+          const frequencies = await analytics.analyzeSceneFrequency(client, options);
+
+          let text = `Scene Execution Frequency\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Total scenes: ${frequencies.length}\n\n`;
+
+          if (frequencies.length > 0) {
+            text += "Top Scenes by Execution:\n";
+            for (const freq of frequencies.slice(0, 20)) {
+              text +=
+                `\n${freq.sceneName} [${freq.sceneId}]\n` +
+                `  Executions: ${freq.executions}\n` +
+                `  Avg/day: ${freq.avgExecutionsPerDay.toFixed(2)}\n` +
+                `  Success rate: ${freq.successRate.toFixed(1)}%\n` +
+                `  Last execution: ${new Date(freq.lastExecution).toISOString()}\n`;
+            }
+            if (frequencies.length > 20) {
+              text += `\n... and ${frequencies.length - 20} more scenes`;
+            }
+          } else {
+            text += "No scene executions found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: scene_frequency failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "system_health": {
+        try {
+          const health = await analytics.analyzeSystemHealth(client);
+
+          let text = `System Health Report\n\n`;
+          text += `Timestamp: ${new Date(health.timestamp).toISOString()}\n\n`;
+
+          text +=
+            `Dead Devices: ${health.deadDevices}\n` +
+            (health.deadDeviceIds.length > 0
+              ? `  IDs: ${health.deadDeviceIds.join(", ")}\n`
+              : "") +
+            `\nFailed Scenes: ${health.failedScenes}\n` +
+            (health.failedSceneIds.length > 0
+              ? `  IDs: ${health.failedSceneIds.join(", ")}\n`
+              : "") +
+            `\nError Rate: ${health.errorRate.toFixed(2)}%\n` +
+            `Warnings (24h): ${health.warningCount}\n` +
+            `Uptime: ${(health.uptime / 3600).toFixed(2)} hours\n`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: system_health failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "dashboard": {
+        try {
+          const dashboard = await analytics.generateDashboard(client, options);
+
+          let text = `Analytics Dashboard\n\n`;
+          text +=
+            `Period: ${new Date(dashboard.period.from).toISOString()} to ${new Date(dashboard.period.to).toISOString()}\n` +
+            `Duration: ${dashboard.period.days.toFixed(1)} days\n\n`;
+
+          text +=
+            `Summary:\n` +
+            `  Health Score: ${dashboard.summary.healthScore}/100\n` +
+            `  Total Activations: ${dashboard.summary.totalActivations}\n` +
+            `  Total Energy: ${dashboard.summary.totalEnergyConsumption.toFixed(2)} kWh\n` +
+            `  Most Active Device: ${dashboard.summary.mostActiveDevice}\n` +
+            `  Most Used Scene: ${dashboard.summary.mostUsedScene}\n\n`;
+
+          text +=
+            `System Health:\n` +
+            `  Dead Devices: ${dashboard.systemHealth.deadDevices}\n` +
+            `  Failed Scenes: ${dashboard.systemHealth.failedScenes}\n` +
+            `  Error Rate: ${dashboard.systemHealth.errorRate.toFixed(2)}%\n` +
+            `  Warnings: ${dashboard.systemHealth.warningCount}\n\n`;
+
+          text += `Top Devices (by activity):\n`;
+          for (const device of dashboard.topDevices.slice(0, 5)) {
+            text += `  ${device.deviceName}: ${device.activations} activations, ${device.avgDailyUsage.toFixed(2)}/day\n`;
+          }
+
+          text += `\nTop Scenes (by execution):\n`;
+          for (const scene of dashboard.topScenes.slice(0, 5)) {
+            text += `  ${scene.sceneName}: ${scene.executions} executions, ${scene.avgExecutionsPerDay.toFixed(2)}/day\n`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: dashboard failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "hourly_distribution": {
+        try {
+          const distribution = await analytics.getHourlyDistribution(client, options);
+
+          let text = `Hourly Activity Distribution\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n\n`;
+
+          for (const hour of distribution) {
+            const bar = "█".repeat(Math.round(hour.percentage / 2));
+            text += `${hour.hour.toString().padStart(2, "0")}:00  ${bar} ${hour.count} (${hour.percentage.toFixed(1)}%)\n`;
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: hourly_distribution failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "room_activity": {
+        try {
+          const rooms = await analytics.getRoomActivity(client, options);
+
+          let text = `Room Activity Summary\n\n`;
+          text += `Period: ${options.from ? new Date(options.from).toISOString() : "7 days ago"} to ${options.to ? new Date(options.to).toISOString() : "now"}\n`;
+          text += `Total rooms: ${rooms.length}\n\n`;
+
+          if (rooms.length > 0) {
+            text += "Rooms by Activity:\n";
+            for (const room of rooms.slice(0, 20)) {
+              text +=
+                `\n${room.roomName} [${room.roomId}]\n` +
+                `  Activations: ${room.activations}\n` +
+                `  Avg/day: ${room.avgDailyActivations.toFixed(2)}\n` +
+                `  Active devices: ${room.activeDevices}/${room.totalDevices}\n`;
+            }
+            if (rooms.length > 20) {
+              text += `\n... and ${rooms.length - 20} more rooms`;
+            }
+          } else {
+            text += "No room activity found in this period.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_analytics: room_activity failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_analytics: unsupported op "${op}". Supported ops: device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity`,
+            },
+          ],
+          isError: true,
+        };
+    }
+  }
+
+  if (name === "fibaro_integration") {
+    const extractedIntegration = extractOp("fibaro_integration", args, "webhook_start|webhook_stop|webhook_status|mqtt_connect|mqtt_disconnect|mqtt_status|mqtt_publish");
+    if ("error" in extractedIntegration) return extractedIntegration.error;
+    const op = extractedIntegration.op;
+
+    // Webhook operations
+    if (op === "webhook_start") {
+      const webhookConfig = args?.webhook_config as any;
+      if (!webhookConfig) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: 'fibaro_integration: "webhook_start" requires "webhook_config" parameter',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      try {
+        const { createWebhookServer } = await import("./integrations/webhook-server.js");
+        const config = {
+          enabled: true,
+          port: webhookConfig.port || 8080,
+          host: webhookConfig.host,
+          authToken: webhookConfig.authToken,
+          routes: webhookConfig.routes || [],
+        };
+
+        const server = await createWebhookServer(config, client);
+        await server.start();
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Webhook server started successfully on port ${config.port}\n\nEndpoints:\n- Health: http://${config.host || "0.0.0.0"}:${config.port}/health\n${config.routes.length > 0 ? `\nConfigured routes:\n${config.routes.map((r: any) => `- ${r.method} ${r.path} → ${r.action}`).join("\n")}` : ""}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to start webhook server: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    if (op === "webhook_stop") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Webhook server stop not implemented - server instances are not persisted.\nRestart the MCP server to stop all webhook servers.",
+          },
+        ],
+      };
+    }
+
+    if (op === "webhook_status") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Webhook server status not implemented - server instances are not persisted.\nUse environment variables to configure permanent webhook servers.",
+          },
+        ],
+      };
+    }
+
+    // MQTT operations
+    if (op === "mqtt_connect") {
+      const mqttConfig = args?.mqtt_config as any;
+      if (!mqttConfig) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: 'fibaro_integration: "mqtt_connect" requires "mqtt_config" parameter',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      try {
+        const { createMqttBridge } = await import("./integrations/mqtt-bridge.js");
+        const config = {
+          enabled: true,
+          broker: mqttConfig.broker,
+          clientId: mqttConfig.clientId || "fibaro-mcp",
+          username: mqttConfig.username,
+          password: mqttConfig.password,
+          subscriptions: mqttConfig.subscriptions || [],
+          publishState: mqttConfig.publishState || false,
+        };
+
+        const bridge = await createMqttBridge(config, client);
+        await bridge.connect();
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `MQTT bridge connected to ${config.broker}\n\nClient ID: ${config.clientId}\nSubscriptions: ${config.subscriptions.length}\nState publishing: ${config.publishState ? "enabled" : "disabled"}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to connect MQTT bridge: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    if (op === "mqtt_disconnect") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "MQTT disconnect not implemented - bridge instances are not persisted.\nRestart the MCP server to disconnect all MQTT bridges.",
+          },
+        ],
+      };
+    }
+
+    if (op === "mqtt_status") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "MQTT status not implemented - bridge instances are not persisted.\nUse environment variables to configure permanent MQTT bridges.",
+          },
+        ],
+      };
+    }
+
+    if (op === "mqtt_publish") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "MQTT publish not implemented - bridge instances are not persisted.\nConnect to MQTT first using mqtt_connect to publish messages.",
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `fibaro_integration: unsupported op "${op}". Supported ops: webhook_start|webhook_stop|webhook_status|mqtt_connect|mqtt_disconnect|mqtt_status|mqtt_publish`,
+        },
+      ],
+          isError: true,
+    };
+  }
+
+  if (name === "fibaro_automation") {
+    const { getWorkflowEngine } = await import("./automation/workflow-engine.js");
+    const workflow = getWorkflowEngine();
+
+    const extractedAutomation = extractOp("fibaro_automation", args, "validate|generate_lua|create");
+    if ("error" in extractedAutomation) return extractedAutomation.error;
+    const op = extractedAutomation.op;
+
+    const automation = args?.automation as any;
+
+    switch (op) {
+      case "validate": {
+        if (!automation) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_automation: "validate" operation requires "automation" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const validation = workflow.validateAutomation(automation);
+
+          let text = `Automation Validation: ${automation.name}\n\n`;
+          text += `Status: ${validation.valid ? "VALID ✓" : "INVALID ✗"}\n\n`;
+
+          if (validation.errors.length > 0) {
+            text += `Errors (${validation.errors.length}):\n`;
+            for (const error of validation.errors) {
+              text += `  ✗ ${error}\n`;
+            }
+            text += "\n";
+          }
+
+          if (validation.warnings.length > 0) {
+            text += `Warnings (${validation.warnings.length}):\n`;
+            for (const warning of validation.warnings) {
+              text += `  ⚠ ${warning}\n`;
+            }
+          }
+
+          if (validation.valid && validation.warnings.length === 0) {
+            text += "No errors or warnings found.";
+          }
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_automation: validation failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "generate_lua": {
+        if (!automation) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_automation: "generate_lua" operation requires "automation" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        try {
+          const luaCode = workflow.generateLuaCode(automation);
+
+          let text = `Generated Lua Code for: ${automation.name}\n\n`;
+          text += "```lua\n";
+          text += luaCode;
+          text += "\n```\n\n";
+          text += `Total lines: ${luaCode.split("\n").length}`;
+
+          return {
+            content: [{ type: "text", text }],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_automation: generate_lua failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      case "create": {
+        if (!automation) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'fibaro_automation: "create" operation requires "automation" parameter',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const deploy = args?.deploy as boolean | undefined;
+
+        try {
+          const result = await workflow.createAutomation(client, automation, deploy);
+
+          let text = `Automation Created: ${automation.name}\n\n`;
+
+          if (result.validation.valid) {
+            text += `Status: SUCCESS ✓\n\n`;
+
+            if (deploy && result.sceneId) {
+              text += `Deployed as Scene ID: ${result.sceneId}\n\n`;
+            }
+
+            text += "Generated Lua Code:\n";
+            text += "```lua\n";
+            text += result.luaCode;
+            text += "\n```\n";
+
+            if (result.validation.warnings.length > 0) {
+              text += `\nWarnings (${result.validation.warnings.length}):\n`;
+              for (const warning of result.validation.warnings) {
+                text += `  ⚠ ${warning}\n`;
+              }
+            }
+          } else {
+            text += `Status: FAILED ✗\n\n`;
+            text += `Errors (${result.validation.errors.length}):\n`;
+            for (const error of result.validation.errors) {
+              text += `  ✗ ${error}\n`;
+            }
+          }
+
+          return {
+            content: [{ type: "text", text }],
+            isError: !result.validation.valid,
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `fibaro_automation: create failed - ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      default:
+        return {
+          content: [
+            {
+              type: "text",
+              text: `fibaro_automation: unsupported op "${op}". Supported ops: create|validate|generate_lua`,
+            },
+          ],
+          isError: true,
         };
     }
   }
@@ -2833,13 +5346,104 @@ async function handleToolCallInternal(
     }
 
     case "get_device_stats": {
-      const stats = await client.getDeviceStats(args?.device_id as number, {
-        from: args?.from as number,
-        to: args?.to as number,
-        property: args?.property as string,
+      const deviceId = args?.device_id as number;
+      const from = args?.from as number | undefined;
+      const to = args?.to as number | undefined;
+      const aggregation = args?.aggregation as AggregationInterval | undefined;
+      const maxPoints = args?.max_points as number | undefined;
+      const metrics = args?.metrics as MetricType[] | undefined;
+      const property = args?.property as string | undefined;
+
+      // If no time range specified, use legacy behavior (pass-through to API)
+      if (from === undefined || to === undefined) {
+        const stats = await client.getDeviceStats(deviceId, { from, to, property });
+        return {
+          content: [{ type: "text", text: JSON.stringify(stats, null, 2) }],
+        };
+      }
+
+      // Validate parameters
+      const validation = validateParams({
+        device_id: deviceId,
+        from,
+        to,
+        aggregation,
+        max_points: maxPoints,
+        metrics,
       });
+
+      if (!validation.valid) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `get_device_stats: ${validation.errors.join(", ")}`,
+        );
+      }
+
+      // Fetch raw stats from Fibaro API
+      const rawStats = await client.getDeviceStats(deviceId, { from, to, property });
+
+      // Get device name for context
+      let deviceName: string | undefined;
+      try {
+        const device = await client.getDevice(deviceId);
+        deviceName = device?.name;
+      } catch {
+        // Device name is optional, continue without it
+      }
+
+      // Aggregate the data
+      const aggregatedStats = aggregateDeviceStats(
+        rawStats,
+        validation.normalized,
+        deviceName,
+      );
+
+      // Format for response (round numbers)
+      const formattedStats = formatForResponse(aggregatedStats);
+
       return {
-        content: [{ type: "text", text: JSON.stringify(stats, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(formattedStats, null, 2) }],
+      };
+    }
+
+    case "fibaro_energy_graph": {
+      const from = args?.from as number;
+      const to = args?.to as number;
+      const grouping = (args?.grouping as "devices" | "rooms") || "devices";
+      const property = (args?.property as "power" | "energy") || "power";
+      const deviceId = args?.device_id as number | undefined;
+      const roomId = args?.room_id as number | undefined;
+
+      // Determine ID based on grouping
+      let id: number;
+      if (grouping === "devices") {
+        if (deviceId === undefined) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_energy_graph: device_id is required when grouping="devices"',
+          );
+        }
+        id = deviceId;
+      } else {
+        if (roomId === undefined) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'fibaro_energy_graph: room_id is required when grouping="rooms"',
+          );
+        }
+        id = roomId;
+      }
+
+      const data = await client.getEnergyHistory({
+        from,
+        to,
+        grouping,
+        property,
+        id,
+      });
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
       };
     }
 

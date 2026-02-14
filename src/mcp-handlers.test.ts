@@ -225,7 +225,8 @@ describe("mcp-handlers", () => {
 
     for (const r of resources) {
       const out = await handleResourceRead(client, r.uri);
-      expect(out.contents[0].mimeType).toBe("application/json");
+      // Each resource should match its declared mimeType
+      expect(out.contents[0].mimeType).toBe(r.mimeType);
       expect(typeof (out.contents[0] as any).text).toBe("string");
     }
   });
@@ -885,6 +886,9 @@ describe("mcp-handlers", () => {
       if (tool.name === "get_device_lua") {
         args = { device_id: 1 };
       }
+      if (tool.name === "fibaro_energy_graph") {
+        args = { from: 1767943794, to: 1767947394, device_id: 955 };
+      }
 
       const out = await handleToolCall(client, tool.name, args);
       expect(out.content.length).toBeGreaterThan(0);
@@ -914,5 +918,373 @@ describe("mcp-handlers", () => {
 
     const out5 = await handleToolCall(client, "get_settings", {});
     expect((out5.content[0] as any).text).toContain("ok");
+  });
+
+  describe("get_device_stats with aggregation", () => {
+    it("returns aggregated stats when from/to are provided", async () => {
+      const mockRawData = {
+        power: [
+          [1736294400, 100],
+          [1736294460, 110],
+          [1736294520, 105],
+          [1736294580, 115],
+        ],
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "PC-desk" }),
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+        from: 1736294400,
+        to: 1736294800,
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.device_id).toBe(955);
+      expect(parsed.device_name).toBe("PC-desk");
+      expect(parsed.time_range.from).toBe(1736294400);
+      expect(parsed.time_range.to).toBe(1736294800);
+      expect(parsed.aggregation).toBeDefined();
+      expect(parsed.metrics).toBeDefined();
+    });
+
+    it("uses legacy pass-through when from/to not provided", async () => {
+      const legacyData = { some: "legacy", data: true };
+      const getDeviceStats = vi.fn().mockResolvedValue(legacyData);
+
+      const client = makeClient({ getDeviceStats });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+      });
+
+      expect(getDeviceStats).toHaveBeenCalledWith(955, {
+        from: undefined,
+        to: undefined,
+        property: undefined,
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed).toEqual(legacyData);
+    });
+
+    it("applies explicit aggregation interval", async () => {
+      const mockRawData = {
+        power: new Array(100).fill(0).map((_, i) => [1736294400 + i * 60, 100 + i]),
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "Test Device" }),
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+        from: 1736294400,
+        to: 1736300400, // ~1.5 hours
+        aggregation: "15min",
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.aggregation.method).toBe("15min");
+      expect(parsed.aggregation.interval_seconds).toBe(900);
+    });
+
+    it("filters metrics when specified", async () => {
+      const mockRawData = {
+        power: [[1736294400, 100]],
+        energy: [[1736294400, 50]],
+        voltage: [[1736294400, 230]],
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "Test" }),
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+        from: 1736294400,
+        to: 1736298000,
+        metrics: ["power", "voltage"],
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      const metricNames = parsed.metrics.map((m: any) => m.metric);
+      expect(metricNames).toContain("power");
+      expect(metricNames).toContain("voltage");
+      expect(metricNames).not.toContain("energy");
+    });
+
+    it("respects max_points parameter", async () => {
+      const mockRawData = {
+        power: new Array(1000).fill(0).map((_, i) => [1736294400 + i * 60, 100 + Math.sin(i) * 50]),
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "Test" }),
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+        from: 1736294400,
+        to: 1736354400, // ~16 hours
+        max_points: 50,
+        aggregation: "raw",
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.aggregation.total_points).toBeLessThanOrEqual(50);
+    });
+
+    it("validates parameters and throws on invalid input", async () => {
+      const client = makeClient();
+
+      // Invalid: from > to
+      await expect(
+        handleToolCall(client, "get_device_stats", {
+          device_id: 955,
+          from: 1736380800,
+          to: 1736294400,
+        }),
+      ).rejects.toThrow(McpError);
+    });
+
+    it("continues gracefully if device name lookup fails", async () => {
+      const mockRawData = {
+        power: [[1736294400, 100]],
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => {
+          throw new Error("Device not found");
+        },
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 999,
+        from: 1736294400,
+        to: 1736298000,
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.device_id).toBe(999);
+      expect(parsed.device_name).toBeUndefined();
+    });
+
+    it("handles empty data gracefully", async () => {
+      const client = makeClient({
+        getDeviceStats: async () => ({}),
+        getDevice: async () => ({ id: 955, name: "Empty Device" }),
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+        from: 1736294400,
+        to: 1736298000,
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.metrics).toHaveLength(0);
+      expect(parsed.aggregation.warnings).toBeDefined();
+    });
+
+    it("works via fibaro_home intent mode", async () => {
+      const mockRawData = {
+        power: [[1736294400, 100]],
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "PC-desk" }),
+      });
+
+      const result = await handleToolCall(client, "fibaro_home", {
+        op: "device_stats",
+        device_id: 955,
+        from: 1736294400,
+        to: 1736298000,
+        aggregation: "5min",
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.device_id).toBe(955);
+      expect(parsed.aggregation.method).toBe("5min");
+    });
+
+    it("fibaro_home supports nested params object for backward compatibility", async () => {
+      const mockRawData = {
+        power: [[1736294400, 100]],
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "PC-desk" }),
+      });
+
+      const result = await handleToolCall(client, "fibaro_home", {
+        op: "device_stats",
+        device_id: 955,
+        params: {
+          from: 1736294400,
+          to: 1736298000,
+        },
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.device_id).toBe(955);
+      expect(parsed.time_range.from).toBe(1736294400);
+    });
+
+    it("returns correct units for each metric type", async () => {
+      const mockRawData = {
+        power: [[1736294400, 100]],
+        energy: [[1736294400, 50]],
+        voltage: [[1736294400, 230]],
+        current: [[1736294400, 0.5]],
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "Test" }),
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+        from: 1736294400,
+        to: 1736298000,
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      const findMetric = (name: string) => parsed.metrics.find((m: any) => m.metric === name);
+
+      expect(findMetric("power")?.unit).toBe("W");
+      expect(findMetric("energy")?.unit).toBe("kWh");
+      expect(findMetric("voltage")?.unit).toBe("V");
+      expect(findMetric("current")?.unit).toBe("A");
+    });
+
+    it("includes aggregation metadata in response", async () => {
+      const mockRawData = {
+        power: new Array(100).fill(0).map((_, i) => [1736294400 + i * 60, 100]),
+      };
+
+      const client = makeClient({
+        getDeviceStats: async () => mockRawData,
+        getDevice: async () => ({ id: 955, name: "Test" }),
+      });
+
+      const result = await handleToolCall(client, "get_device_stats", {
+        device_id: 955,
+        from: 1736294400,
+        to: 1736380800, // 24 hours
+      });
+
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.aggregation.method).toBeDefined();
+      expect(parsed.aggregation.interval_seconds).toBeDefined();
+      expect(parsed.aggregation.total_points).toBeDefined();
+      expect(parsed.aggregation.raw_points_count).toBeDefined();
+    });
+  });
+
+  describe("fibaro_energy_graph", () => {
+    it("fetches device power history", async () => {
+      const mockData = {
+        data: [
+          { timestamp: 1767943794, value: 150.5 },
+          { timestamp: 1767944394, value: 145.2 },
+        ],
+      };
+      const getEnergyHistory = vi.fn().mockResolvedValue(mockData);
+      const client = makeClient({ getEnergyHistory });
+
+      const result = await handleToolCall(client, "fibaro_energy_graph", {
+        from: 1767943794,
+        to: 1767947394,
+        device_id: 955,
+      });
+
+      expect(getEnergyHistory).toHaveBeenCalledWith({
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "devices",
+        property: "power",
+        id: 955,
+      });
+      const text = (result.content[0] as any).text;
+      const parsed = JSON.parse(text);
+      expect(parsed.data).toHaveLength(2);
+    });
+
+    it("fetches room power history", async () => {
+      const mockData = { data: [{ timestamp: 1767943794, value: 500 }] };
+      const getEnergyHistory = vi.fn().mockResolvedValue(mockData);
+      const client = makeClient({ getEnergyHistory });
+
+      const result = await handleToolCall(client, "fibaro_energy_graph", {
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "rooms",
+        room_id: 226,
+      });
+
+      expect(getEnergyHistory).toHaveBeenCalledWith({
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "rooms",
+        property: "power",
+        id: 226,
+      });
+    });
+
+    it("fetches energy instead of power", async () => {
+      const getEnergyHistory = vi.fn().mockResolvedValue({ data: [] });
+      const client = makeClient({ getEnergyHistory });
+
+      await handleToolCall(client, "fibaro_energy_graph", {
+        from: 1767943794,
+        to: 1767947394,
+        property: "energy",
+        device_id: 955,
+      });
+
+      expect(getEnergyHistory).toHaveBeenCalledWith({
+        from: 1767943794,
+        to: 1767947394,
+        grouping: "devices",
+        property: "energy",
+        id: 955,
+      });
+    });
+
+    it("throws error if device_id missing for grouping=devices", async () => {
+      const client = makeClient({});
+
+      await expect(
+        handleToolCall(client, "fibaro_energy_graph", {
+          from: 1767943794,
+          to: 1767947394,
+          grouping: "devices",
+        }),
+      ).rejects.toThrow('device_id is required when grouping="devices"');
+    });
+
+    it("throws error if room_id missing for grouping=rooms", async () => {
+      const client = makeClient({});
+
+      await expect(
+        handleToolCall(client, "fibaro_energy_graph", {
+          from: 1767943794,
+          to: 1767947394,
+          grouping: "rooms",
+        }),
+      ).rejects.toThrow('room_id is required when grouping="rooms"');
+    });
   });
 });

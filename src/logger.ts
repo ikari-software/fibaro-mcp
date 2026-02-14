@@ -9,6 +9,9 @@
  *
  * Configure via FIBARO_LOG_LEVEL environment variable.
  * Default is 'info'.
+ *
+ * IMPORTANT: All logging goes to stderr to avoid polluting stdout,
+ * which is reserved for MCP JSON-RPC messages in stdio transport.
  */
 
 export enum LogLevel {
@@ -79,19 +82,21 @@ class Logger {
 
   /**
    * Log an info message.
+   * Uses stderr to keep stdout clean for MCP JSON-RPC messages.
    */
   info(message: string, data?: unknown): void {
     if (this.shouldLog(LogLevel.INFO)) {
-      console.log(this.formatMessage(LogLevel.INFO, message, data));
+      console.error(this.formatMessage(LogLevel.INFO, message, data));
     }
   }
 
   /**
    * Log a debug message.
+   * Uses stderr to keep stdout clean for MCP JSON-RPC messages.
    */
   debug(message: string, data?: unknown): void {
     if (this.shouldLog(LogLevel.DEBUG)) {
-      console.log(this.formatMessage(LogLevel.DEBUG, message, data));
+      console.error(this.formatMessage(LogLevel.DEBUG, message, data));
     }
   }
 

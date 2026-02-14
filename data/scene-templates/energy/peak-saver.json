@@ -1,0 +1,62 @@
+{
+  "id": "peak-saver-v1",
+  "name": "Peak Energy Saver",
+  "description": "Reduces energy consumption during peak hours by dimming lights and adjusting thermostats",
+  "category": "energy",
+  "author": "Fibaro MCP",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "name": "light_ids",
+      "type": "string",
+      "description": "Comma-separated list of light device IDs to dim (e.g., \"45,46,47\")",
+      "required": true
+    },
+    {
+      "name": "thermostat_ids",
+      "type": "string",
+      "description": "Comma-separated list of thermostat device IDs to adjust (e.g., \"10,11\")",
+      "required": false,
+      "default": ""
+    },
+    {
+      "name": "peak_start_time",
+      "type": "time",
+      "description": "Start of peak hours in HH:MM format",
+      "required": true,
+      "default": "17:00"
+    },
+    {
+      "name": "peak_end_time",
+      "type": "time",
+      "description": "End of peak hours in HH:MM format",
+      "required": true,
+      "default": "21:00"
+    },
+    {
+      "name": "light_reduction_percent",
+      "type": "number",
+      "description": "Percentage to reduce light brightness (0-50)",
+      "required": false,
+      "default": 30,
+      "validation": {
+        "min": 0,
+        "max": 50
+      }
+    },
+    {
+      "name": "temp_adjustment_celsius",
+      "type": "number",
+      "description": "Temperature adjustment in Celsius (can be negative)",
+      "required": false,
+      "default": -2,
+      "validation": {
+        "min": -5,
+        "max": 5
+      }
+    }
+  ],
+  "lua_template": "--[[\n  Peak Energy Saver Scene\n  Reduces energy consumption during peak hours\n]]\n\nlocal lightIds = {}\nif {{light_ids}} ~= \"\" then\n  for id in string.gmatch({{light_ids}}, \"[^,]+\") do\n    table.insert(lightIds, tonumber(id))\n  end\nend\n\nlocal thermostatIds = {}\nif {{thermostat_ids}} ~= \"\" then\n  for id in string.gmatch({{thermostat_ids}}, \"[^,]+\") do\n    table.insert(thermostatIds, tonumber(id))\n  end\nend\n\nlocal lightReduction = {{light_reduction_percent}}\nlocal tempAdjustment = {{temp_adjustment_celsius}}\n\n-- Function to check if we're in peak hours\nlocal function isPeakHours()\n  local currentTime = os.date(\"*t\")\n  local currentMinutes = currentTime.hour * 60 + currentTime.min\n  \n  local startTime = {{peak_start_time}}\n  local startHour, startMin = string.match(startTime, \"(%d+):(%d+)\")\n  local startMinutes = tonumber(startHour) * 60 + tonumber(startMin)\n  \n  local endTime = {{peak_end_time}}\n  local endHour, endMin = string.match(endTime, \"(%d+):(%d+)\")\n  local endMinutes = tonumber(endHour) * 60 + tonumber(endMin)\n  \n  return currentMinutes >= startMinutes and currentMinutes <= endMinutes\nend\n\nif isPeakHours() then\n  fibaro.debug(\"Peak energy saver: Entering energy saving mode\")\n  \n  -- Dim lights\n  for _, deviceId in ipairs(lightIds) do\n    local currentValue = tonumber(fibaro.getValue(deviceId, \"value\")) or 100\n    if currentValue > 0 then\n      local newValue = math.floor(currentValue * (1 - lightReduction / 100))\n      newValue = math.max(10, newValue) -- Minimum 10% brightness\n      fibaro.call(deviceId, \"setValue\", newValue)\n      fibaro.debug(\"Dimmed light \" .. deviceId .. \" to \" .. newValue .. \"%\")\n    end\n  end\n  \n  -- Adjust thermostats\n  for _, deviceId in ipairs(thermostatIds) do\n    local currentTemp = tonumber(fibaro.getValue(deviceId, \"targetLevel\"))\n    if currentTemp then\n      local newTemp = currentTemp + tempAdjustment\n      fibaro.call(deviceId, \"setTargetLevel\", newTemp)\n      fibaro.debug(\"Adjusted thermostat \" .. deviceId .. \" to \" .. newTemp .. \"°C\")\n    end\n  end\n  \n  fibaro.debug(\"Peak energy saver: Energy saving mode active\")\nelse\n  fibaro.debug(\"Peak energy saver: Not in peak hours, no action taken\")\nend",
+  "required_devices": ["light"],
+  "tags": ["energy", "savings", "peak-hours", "automation", "efficiency"]
+}
