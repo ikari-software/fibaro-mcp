@@ -69,10 +69,6 @@ export function validateIdentifier(value: string, label: string): void {
 }
 
 /**
- * Validate that a string is safe for use in Lua comments/debug strings.
- * More permissive than identifiers but still blocks injection vectors.
- */
-/**
  * Validate that a value is a finite number before interpolating into Lua.
  * Prevents injection via non-numeric values in numeric positions.
  */

@@ -14,10 +14,21 @@ import {
 import type { Condition, ConditionGroup, ValidationResult } from "./automation-types.js";
 
 export class ConditionBuilder {
-  /** Map JS-style operators to Lua equivalents */
+  /** Map JS-style operators to safe Lua equivalents */
   private toLuaOperator(op: string): string {
-    if (op === "!=") return "~=";
-    return op;
+    const OPERATOR_MAP: Record<string, string> = {
+      "==": "==",
+      "!=": "~=",
+      ">": ">",
+      "<": "<",
+      ">=": ">=",
+      "<=": "<=",
+    };
+    const luaOp = OPERATOR_MAP[op];
+    if (!luaOp) {
+      throw new Error(`Invalid operator: ${op}`);
+    }
+    return luaOp;
   }
 
   /**
