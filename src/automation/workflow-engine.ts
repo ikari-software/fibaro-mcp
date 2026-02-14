@@ -299,11 +299,11 @@ export class WorkflowEngine {
       }
 
       case "variable_set": {
-        // Use fibaro.setGlobalVariable()
+        // Use fibaro.setGlobalVariable() — global variables are always strings
         const varName = action.variableName!;
         validateIdentifier(varName, "variable name");
-        const value = formatLuaValue(action.value);
-        return `fibaro.setGlobalVariable("${escapeLuaString(varName)}", ${value})`;
+        const strValue = escapeLuaString(String(action.value));
+        return `fibaro.setGlobalVariable("${escapeLuaString(varName)}", "${strValue}")`;
       }
 
       case "notification": {
