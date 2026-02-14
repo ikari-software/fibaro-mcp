@@ -5,11 +5,11 @@
  * Licensed under the MIT License
  */
 
-import { logger } from "../logger.js";
 import {
   escapeLuaString,
   formatLuaValue,
   validateIdentifier,
+  validateNumber,
 } from "./lua-sanitizer.js";
 import type { Condition, ConditionGroup, ValidationResult } from "./automation-types.js";
 
@@ -51,6 +51,7 @@ export class ConditionBuilder {
 
         // Validate property name to prevent Lua injection
         validateIdentifier(condition.property, "device property");
+        validateNumber(condition.deviceId, "deviceId");
 
         // Use fibaro.getValue() for device properties
         const getValue = `fibaro.getValue(${condition.deviceId}, "${escapeLuaString(condition.property)}")`;
@@ -96,7 +97,7 @@ export class ConditionBuilder {
         // Use fibaro.getValue(1, "sunriseHour") and fibaro.getValue(1, "sunsetHour")
         const sunProperty =
           condition.sunPosition === "sunrise" ? "sunriseHour" : "sunsetHour";
-        const offset = condition.timeOffset || 0;
+        const offset = condition.timeOffset ? validateNumber(condition.timeOffset, "timeOffset") : 0;
 
         // Parse "HH:MM" string from sunriseHour/sunsetHour into total minutes
         const sunTime = `(function() local h,m = string.match(fibaro.getValue(1, "${sunProperty}"), "(%d+):(%d+)") return tonumber(h)*60 + tonumber(m) ${offset >= 0 ? "+" : ""} ${offset} end)()`;

@@ -72,8 +72,25 @@ export function validateIdentifier(value: string, label: string): void {
  * Validate that a string is safe for use in Lua comments/debug strings.
  * More permissive than identifiers but still blocks injection vectors.
  */
+/**
+ * Validate that a value is a finite number before interpolating into Lua.
+ * Prevents injection via non-numeric values in numeric positions.
+ */
+export function validateNumber(value: any, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(
+      `Invalid ${label}: expected a finite number, got ${typeof value === "number" ? String(value) : typeof value}`
+    );
+  }
+  return value;
+}
+
+export function isValidDisplayName(value: string): boolean {
+  return !!value && value.length <= 200 && !DANGEROUS_DISPLAY_PATTERNS.test(value);
+}
+
 export function validateDisplayName(value: string, label: string): void {
-  if (!value || value.length > 200 || DANGEROUS_DISPLAY_PATTERNS.test(value)) {
+  if (!isValidDisplayName(value)) {
     throw new Error(
       `Invalid ${label}: "${value}" contains sequences that could break Lua code generation (-- \\\\ ]] [[)`
     );

@@ -13,6 +13,8 @@ import {
   formatLuaValue,
   validateIdentifier,
   validateDisplayName,
+  validateNumber,
+  isValidDisplayName,
 } from "./lua-sanitizer.js";
 import type {
   Automation,
@@ -156,6 +158,12 @@ export class WorkflowEngine {
     // Basic validation
     if (!automation.name) {
       errors.push("Automation must have a name");
+    } else if (!isValidDisplayName(automation.name)) {
+      errors.push("Automation name contains sequences unsafe for Lua code generation (-- \\\\ ]] [[)");
+    }
+
+    if (automation.description && !isValidDisplayName(automation.description)) {
+      errors.push("Automation description contains sequences unsafe for Lua code generation (-- \\\\ ]] [[)");
     }
 
     if (!automation.conditions) {
@@ -269,7 +277,7 @@ export class WorkflowEngine {
     switch (action.type) {
       case "device_action": {
         // Use fibaro.call() for device actions
-        const deviceId = action.deviceId!;
+        const deviceId = validateNumber(action.deviceId!, "deviceId");
         const actionName = action.action!;
         validateIdentifier(actionName, "action name");
         const args = action.args || [];
@@ -280,13 +288,13 @@ export class WorkflowEngine {
 
       case "scene": {
         // Use fibaro.scene() to start scenes
-        const sceneId = action.sceneId!;
+        const sceneId = validateNumber(action.sceneId!, "sceneId");
         return `fibaro.scene("start", {${sceneId}})`;
       }
 
       case "delay": {
         // Use fibaro.sleep() for delays (expects milliseconds)
-        const delayMs = action.delay!;
+        const delayMs = validateNumber(action.delay!, "delay");
         const delaySeconds = (delayMs / 1000).toFixed(3);
         return `fibaro.sleep(${delayMs}) -- ${delaySeconds}s delay`;
       }
