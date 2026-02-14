@@ -2380,6 +2380,7 @@ async function handleToolCallInternal(
               text: `fibaro_device: unsupported op "${op}". Supported ops: list|get|action|turn_on|turn_off|set_brightness|set_color|set_temperature|delete|get_lua`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -2423,6 +2424,7 @@ async function handleToolCallInternal(
               text: `fibaro_scene: unsupported op "${op}". Supported ops: list|get|run|stop|get_lua|create|update_lua|delete`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -2461,6 +2463,7 @@ async function handleToolCallInternal(
               text: `fibaro_variable: unsupported op "${op}". Supported ops: list|get|set|create|delete`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -2505,6 +2508,7 @@ async function handleToolCallInternal(
               text: `fibaro_quick_app: unsupported op "${op}". Supported ops: list|create|update_code|update_variables|get_lua|delete`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -2686,6 +2690,7 @@ async function handleToolCallInternal(
               text: `fibaro_home: unsupported op "${op}". Supported ops include: system_info|weather|energy_graph|rooms|sections|...|device_stats`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -2911,6 +2916,7 @@ async function handleToolCallInternal(
               text: `fibaro_template: unsupported op "${op}". Supported ops: list|get|instantiate|create|delete`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -3096,6 +3102,7 @@ async function handleToolCallInternal(
               text: `fibaro_history: unsupported op "${op}". Supported ops: query|stats|aggregate|export`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -3237,6 +3244,7 @@ async function handleToolCallInternal(
               text: `fibaro_scene_history: unsupported op "${op}". Supported ops: query|stats|performance`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -3485,6 +3493,7 @@ async function handleToolCallInternal(
               text: `fibaro_backup: unsupported op "${op}". Supported ops: export|import|validate`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -3649,6 +3658,7 @@ async function handleToolCallInternal(
               text: `fibaro_bulk: unsupported op "${op}". Supported ops: execute|preview`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -3841,6 +3851,7 @@ async function handleToolCallInternal(
               text: `fibaro_repl: unsupported op "${op}". Supported ops: execute|list_sessions|clear_session|clear_all|sync`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -4161,6 +4172,7 @@ async function handleToolCallInternal(
               text: `fibaro_analytics: unsupported op "${op}". Supported ops: device_usage|energy_trends|scene_frequency|system_health|dashboard|hourly_distribution|room_activity`,
             },
           ],
+          isError: true,
         };
     }
   }
@@ -4341,6 +4353,7 @@ async function handleToolCallInternal(
           text: `fibaro_integration: unsupported op "${op}". Supported ops: webhook_start|webhook_stop|webhook_status|mqtt_connect|mqtt_disconnect|mqtt_status|mqtt_publish`,
         },
       ],
+          isError: true,
     };
   }
 
@@ -4527,6 +4540,7 @@ async function handleToolCallInternal(
               text: `fibaro_automation: unsupported op "${op}". Supported ops: create|validate|generate_lua`,
             },
           ],
+          isError: true,
         };
     }
   }

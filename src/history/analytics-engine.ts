@@ -336,6 +336,7 @@ export class AnalyticsEngine {
 
     return {
       timestamp: Date.now(),
+      totalDevices: devices.length,
       deadDevices: deadDevices.length,
       deadDeviceIds,
       failedScenes: failedSceneIds.length,
@@ -378,7 +379,7 @@ export class AnalyticsEngine {
     const mostUsedScene = topScenes[0]?.sceneName || "N/A";
 
     // Calculate health score (0-100)
-    const healthScore = this.calculateHealthScore(systemHealth, topDevices.length);
+    const healthScore = this.calculateHealthScore(systemHealth, systemHealth.totalDevices);
 
     return {
       period: {
@@ -506,21 +507,6 @@ export class AnalyticsEngine {
   }
 
   // Private helper methods
-
-  private getIntervalMs(groupBy: string): number {
-    switch (groupBy) {
-      case "hour":
-        return 3600000;
-      case "day":
-        return 24 * 3600000;
-      case "week":
-        return 7 * 24 * 3600000;
-      case "month":
-        return 30 * 24 * 3600000;
-      default:
-        return 24 * 3600000;
-    }
-  }
 
   private calculateHealthScore(
     health: SystemHealthMetrics,

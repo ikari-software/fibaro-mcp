@@ -19,7 +19,7 @@ export class ExportFormatter {
       case "json":
         return this.formatJSON(exportData);
       case "yaml":
-        return this.formatYAML(exportData);
+        return await this.formatYAML(exportData);
       default:
         throw new Error(`Unsupported format: ${format}`);
     }
@@ -36,7 +36,7 @@ export class ExportFormatter {
         case "json":
           return this.parseJSON(data);
         case "yaml":
-          return this.parseYAML(data);
+          return await this.parseYAML(data);
         default:
           throw new Error(`Unsupported format: ${format}`);
       }
@@ -112,7 +112,7 @@ export class ExportFormatter {
         "YAML format not available. Please install js-yaml: npm install js-yaml"
       );
     }
-    return yaml.default.load(data) as FibaroExport;
+    return yaml.default.load(data, { schema: yaml.default.JSON_SCHEMA }) as FibaroExport;
   }
 }
 

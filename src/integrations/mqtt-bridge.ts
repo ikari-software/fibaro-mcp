@@ -265,10 +265,30 @@ export class MqttBridge implements IMqttBridge {
     }
   }
 
+  private matchTopic(pattern: string, topic: string): boolean {
+    const patternParts = pattern.split("/");
+    const topicParts = topic.split("/");
+
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i] === "#") return true;
+      if (i >= topicParts.length) return false;
+      if (patternParts[i] !== "+" && patternParts[i] !== topicParts[i]) return false;
+    }
+
+    return patternParts.length === topicParts.length;
+  }
+
   private async handleMessage(topic: string, message: string): Promise<void> {
     logger.debug(`MQTT message received on ${topic}: ${message}`);
 
-    const subscription = this.subscriptions.get(topic);
+    // Find matching subscription (supports + and # MQTT wildcards)
+    let subscription: MqttSubscription | undefined;
+    for (const [pattern, sub] of this.subscriptions) {
+      if (this.matchTopic(pattern, topic)) {
+        subscription = sub;
+        break;
+      }
+    }
     if (!subscription) {
       logger.warn(`No subscription handler found for topic: ${topic}`);
       return;

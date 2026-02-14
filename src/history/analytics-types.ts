@@ -40,6 +40,7 @@ export interface EnergyTrend {
  */
 export interface SystemHealthMetrics {
   timestamp: number;
+  totalDevices: number;
   deadDevices: number;
   deadDeviceIds: number[];
   failedScenes: number;

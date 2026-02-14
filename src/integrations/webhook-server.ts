@@ -239,7 +239,7 @@ export class WebhookServer implements IWebhookServer {
                 error: "variableName required for set_variable action",
               });
             }
-            const value = req.body.value || req.query.value;
+            const value = req.body.value ?? req.query.value;
             if (value === undefined) {
               return res.status(400).json({ error: "value required" });
             }

@@ -310,7 +310,7 @@ export class BackupManager {
     for (const room of rooms) {
       try {
         if (options.dry_run) {
-          result.imported.rooms++;
+          result.skipped.rooms++;
           continue;
         }
 
@@ -357,7 +357,7 @@ export class BackupManager {
     for (const section of sections) {
       try {
         if (options.dry_run) {
-          result.imported.sections++;
+          result.skipped.sections++;
           continue;
         }
 
@@ -403,7 +403,7 @@ export class BackupManager {
     for (const device of devices) {
       try {
         if (options.dry_run) {
-          result.imported.devices++;
+          result.skipped.devices++;
           continue;
         }
 
@@ -456,7 +456,7 @@ export class BackupManager {
     for (const variable of variables) {
       try {
         if (options.dry_run) {
-          result.imported.variables++;
+          result.skipped.variables++;
           continue;
         }
 
@@ -502,7 +502,7 @@ export class BackupManager {
     for (const scene of scenes) {
       try {
         if (options.dry_run) {
-          result.imported.scenes++;
+          result.skipped.scenes++;
           continue;
         }
 
@@ -548,7 +548,7 @@ export class BackupManager {
     for (const user of users) {
       try {
         if (options.dry_run) {
-          result.imported.users++;
+          result.skipped.users++;
           continue;
         }
 

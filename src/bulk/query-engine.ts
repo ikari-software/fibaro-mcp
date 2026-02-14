@@ -206,10 +206,10 @@ export class QueryEngine {
   ): boolean {
     // Coerce both sides to numbers when possible for consistent comparison
     // (Fibaro API may return "23.5" for a numeric property)
-    const a = typeof actualValue === "string" && !isNaN(Number(actualValue))
+    const a = typeof actualValue === "string" && actualValue.trim() !== "" && !isNaN(Number(actualValue))
       ? Number(actualValue)
       : actualValue;
-    const b = typeof expectedValue === "string" && !isNaN(Number(expectedValue))
+    const b = typeof expectedValue === "string" && expectedValue.trim() !== "" && !isNaN(Number(expectedValue))
       ? Number(expectedValue)
       : expectedValue;
 

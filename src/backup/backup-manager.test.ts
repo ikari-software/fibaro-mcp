@@ -269,8 +269,10 @@ describe("BackupManager", () => {
         dry_run: true,
       });
 
-      expect(result.imported.rooms).toBe(1);
-      expect(result.imported.scenes).toBe(1);
+      expect(result.imported.rooms).toBe(0);
+      expect(result.imported.scenes).toBe(0);
+      expect(result.skipped.rooms).toBe(1);
+      expect(result.skipped.scenes).toBe(1);
       expect(mockClient.createRoom).not.toHaveBeenCalled();
       expect(mockClient.createScene).not.toHaveBeenCalled();
     });
