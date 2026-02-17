@@ -1,19 +1,20 @@
 # Fibaro MCP - Complete Feature List
 
-**Version 2.0.0** - Comprehensive Fibaro Home Automation Management
+**Version 3.0.0** - Advanced Automation, Analytics & Integrations
 
 This document provides a complete overview of all available features and tools in the Fibaro MCP server.
 
-## 📊 Quick Stats
+##  Quick Stats
 
-- **Total Tools:** 70+
+- **Total Tools:** 80+
 - **API Coverage:** ~95% of Fibaro Home Center API
-- **Management Areas:** 15 major categories
+- **Management Areas:** 15+ major categories
 - **Full CRUD Operations:** Devices, Scenes, Rooms, Sections, Users, Geofences, and more
+- **v3 Additions:** 10 new tools for automation, analytics, integrations, and more
 
 ---
 
-## 🏠 Device Management (12 tools)
+##  Device Management (12 tools)
 
 ### Basic Device Control
 - `list_devices` - List all devices with filtering options
@@ -35,7 +36,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🎬 Scene Management (8 tools)
+##  Scene Management (8 tools)
 
 ### Scene Operations
 - `list_scenes` - List all scenes with filtering
@@ -52,7 +53,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 📱 Quick App Management (5 tools)
+##  Quick App Management (5 tools)
 
 - `list_quick_apps` - List all Quick Apps
 - `get_device_lua` - Read Quick App code and variables
@@ -64,7 +65,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🏘️ Room & Section Management (6 tools)
+##  Room & Section Management (6 tools)
 
 ### Rooms
 - `list_rooms` - List all rooms
@@ -82,7 +83,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 👥 User Management (4 tools)
+##  User Management (4 tools)
 
 - `list_users` - List all system users
 - `create_user` - Create new users
@@ -93,7 +94,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🌍 Global Variables (4 tools)
+##  Global Variables (4 tools)
 
 - `list_global_variables` - List all variables
 - `get_global_variable` - Get variable value
@@ -115,7 +116,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🔔 Notifications (3 tools)
+##  Notifications (3 tools)
 
 - `list_notifications` - View all notifications
 - `send_notification` - Send custom notifications to users
@@ -125,7 +126,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🚨 Alarm Management (3 tools)
+##  Alarm Management (3 tools)
 
 - `list_alarms` - List all alarm partitions
 - `arm_alarm` - Arm alarm partition
@@ -135,7 +136,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🌡️ Climate & Heating (3 tools)
+##  Climate & Heating (3 tools)
 
 - `list_climate_zones` - List all heating zones
 - `set_climate_mode` - Set zone mode (heating, cooling, eco, etc.)
@@ -145,7 +146,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🔌 Z-Wave Network Management (7 tools)
+##  Z-Wave Network Management (7 tools)
 
 - `get_zwave_network` - View network topology and status
 - `start_zwave_inclusion` / `stop_zwave_inclusion` - Add devices
@@ -157,7 +158,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 💾 Backup & Restore (3 tools)
+##  Backup & Restore (3 tools)
 
 - `create_backup` - Create system backup
 - `list_backups` - List available backups
@@ -167,7 +168,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## ⚙️ System Management (4 tools)
+##  System Management (4 tools)
 
 - `get_system_info` - System information
 - `get_settings` - View system settings
@@ -178,7 +179,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 📊 Event Logs & History (2 tools)
+##  Event Logs & History (2 tools)
 
 - `get_event_log` - View system event logs with filtering
 - Device statistics and historical data
@@ -188,7 +189,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 📍 Geofencing (4 tools)
+##  Geofencing (4 tools)
 
 - `list_geofences` - List all geofences
 - `create_geofence` - Create location-based zones
@@ -199,7 +200,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🔌 Plugin Management (4 tools)
+##  Plugin Management (4 tools)
 
 - `list_plugins` - List installed plugins
 - `install_plugin` - Install new plugins from URL
@@ -210,7 +211,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🎯 Custom Events (1 tool)
+##  Custom Events (1 tool)
 
 - `trigger_custom_event` - Fire custom events in the system
 
@@ -218,7 +219,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## ☁️ Weather & Energy (2 tools)
+##  Weather & Energy (2 tools)
 
 - `get_weather` - Current weather data
 - `get_energy_panel` - Energy consumption monitoring
@@ -227,7 +228,7 @@ This document provides a complete overview of all available features and tools i
 
 ---
 
-## 🔧 MCP Resources (5 resources)
+##  MCP Resources (5 resources)
 
 Real-time data access:
 - `fibaro://devices` - Live device states
@@ -238,9 +239,88 @@ Real-time data access:
 
 ---
 
-## 📋 Management Categories
+---
 
-### ✅ Full CRUD Operations
+##  v3 Features
+
+###  Scene Templates (`fibaro_template`)
+- JSON-based reusable scene templates with `{{placeholder}}` substitution
+- Built-in templates for lighting, security, energy management
+- Custom template creation and management
+- Operations: `list`, `get`, `instantiate`, `create`, `delete`
+- See [TEMPLATES.md](TEMPLATES.md)
+
+###  Device History (`fibaro_history`)
+- Query historical device states from event log
+- Time-based aggregation (5m, 15m, 1h, 6h, 1d, 1w)
+- Statistics: min, max, average, count
+- Export to JSON or CSV
+- Operations: `query`, `stats`, `aggregate`, `export`
+
+###  Scene History (`fibaro_scene_history`)
+- Scene execution tracking and performance metrics
+- Success/failure rate monitoring, duration analysis
+- Operations: `query`, `stats`, `performance`, `export`
+
+###  Enhanced Backup (`fibaro_backup`)
+- Comprehensive system export to JSON or YAML
+- Selective backup by type (devices, scenes, rooms, sections, variables, users)
+- Import with validation and dry-run mode
+- Password exclusion for security
+- Operations: `export`, `validate`, `import`
+
+###  Lua REPL (`fibaro_repl`)
+- Interactive Lua code execution on the Fibaro controller
+- Temporary scene-based sandboxing with auto-cleanup
+- Multi-session support
+- Operations: `execute`, `list_sessions`, `clear_session`, `clear_all`, `sync`
+
+###  Bulk Operations (`fibaro_bulk`)
+- Query-based device selection (by room, type, interface, name pattern, properties)
+- Bulk actions: device_action, set_property, enable, disable
+- Parallel execution with concurrency control
+- Dry-run mode for previews
+- Operations: `execute`, `preview`
+
+###  Analytics Engine (`fibaro_analytics`)
+- Device usage patterns and statistics
+- Energy consumption trends by room and device type
+- Scene frequency and success rates
+- System health score (0-100)
+- Hourly activity distribution, room activity summaries
+- Comprehensive analytics dashboard
+- Operations: `dashboard`, `device_usage`, `energy_trends`, `scene_frequency`, `system_health`, `hourly_distribution`, `room_activity`
+- See [ANALYTICS.md](ANALYTICS.md)
+
+###  Energy History Graph (`fibaro_energy_graph`)
+- Historical power/energy data from native HC2 summary-graph API
+- Works for both devices and rooms
+- Supports power and energy properties
+
+###  External Integrations (`fibaro_integration`)
+- **Webhook Server**: Configurable HTTP endpoints with Bearer token auth
+- **MQTT Bridge**: Connect to MQTT brokers, auto-publish device states
+- Requires optional dependencies (`express`, `mqtt`)
+- Operations: `webhook_start`, `webhook_stop`, `webhook_status`, `mqtt_connect`, `mqtt_disconnect`, `mqtt_status`, `mqtt_publish`
+- See [INTEGRATIONS.md](INTEGRATIONS.md)
+
+###  Automation Builder (`fibaro_automation`)
+- Visual automation creation with JSON definitions
+- Multi-condition triggers (AND/OR logic, nested groups)
+- Condition types: device_state, variable, time, sun_position, custom Lua
+- Action types: device_action, scene, delay, variable_set, notification, custom Lua
+- Generates valid Fibaro Lua code using proper API calls
+- Validation before deployment
+- Operations: `validate`, `generate_lua`, `create`
+- See [AUTOMATION.md](AUTOMATION.md)
+
+All v3 tools use the `op` parameter: `fibaro_analytics op=dashboard`
+
+---
+
+##  Management Categories
+
+###  Full CRUD Operations
 - **Devices** - Create (Quick Apps), Read, Update, Delete
 - **Scenes** - Create, Read, Update, Delete (with Lua code)
 - **Rooms** - Create, Read, Update, Delete
@@ -250,7 +330,7 @@ Real-time data access:
 - **Geofences** - Create, Read, Update, Delete
 - **Quick Apps** - Create, Read, Update, Delete
 
-### ✅ Advanced Management
+###  Advanced Management
 - Z-Wave network topology and maintenance
 - System backups and restoration
 - Plugin installation and management
@@ -260,7 +340,7 @@ Real-time data access:
 - Notification delivery
 - Profile/mode switching
 
-### ✅ Lua Script Management
+###  Lua Script Management
 - Scene Lua code editing
 - Quick App development
 - Custom automation logic
@@ -268,7 +348,7 @@ Real-time data access:
 
 ---
 
-## 🚀 What You Can Do
+##  What You Can Do
 
 ### With Natural Language (via Claude):
 
@@ -313,7 +393,7 @@ Real-time data access:
 
 ---
 
-## 💡 Use Cases
+##  Use Cases
 
 ### Home Automation
 - Complete smart home control
@@ -341,7 +421,7 @@ Real-time data access:
 
 ---
 
-## 🔐 Security Features
+##  Security Features
 
 - User authentication and authorization
 - Secure credential management
@@ -352,7 +432,7 @@ Real-time data access:
 
 ---
 
-## 📱 Platform Support
+##  Platform Support
 
 - **Fibaro Home Center 2 (HC2)**
 - **Fibaro Home Center 3 (HC3)**
@@ -360,22 +440,22 @@ Real-time data access:
 
 ---
 
-## 🛠️ Technical Capabilities
+##  Technical Capabilities
 
 ### API Coverage
-- ✅ Device API (100%)
-- ✅ Scene API (100%)
-- ✅ Room/Section API (100%)
-- ✅ User API (100%)
-- ✅ Global Variables (100%)
-- ✅ Quick Apps (100%)
-- ✅ Z-Wave Management (95%)
-- ✅ Alarms (90%)
-- ✅ System Management (95%)
-- ✅ Backup/Restore (100%)
-- ✅ Notifications (90%)
-- ✅ Geofencing (100%)
-- ✅ Plugins (100%)
+-  Device API (100%)
+-  Scene API (100%)
+-  Room/Section API (100%)
+-  User API (100%)
+-  Global Variables (100%)
+-  Quick Apps (100%)
+-  Z-Wave Management (95%)
+-  Alarms (90%)
+-  System Management (95%)
+-  Backup/Restore (100%)
+-  Notifications (90%)
+-  Geofencing (100%)
+-  Plugins (100%)
 
 ### Protocol Support
 - Z-Wave
@@ -391,21 +471,21 @@ Real-time data access:
 
 ---
 
-## 🎯 Version 2.0.0 Highlights
+##  Version 2.0.0 Highlights
 
 **NEW in 2.0:**
-- 🏘️ Complete room and section management
-- 👥 Full user lifecycle management
-- 🌍 Home profile/mode switching
-- 🚨 Alarm system control
-- 🔌 Z-Wave network management
-- 💾 Backup and restore
-- 📍 Geofencing
-- 🔌 Plugin management
-- 🌡️ Climate zones
-- 📊 Event logs and statistics
-- 🔔 Custom notifications
-- ⚙️ System settings management
+-  Complete room and section management
+-  Full user lifecycle management
+-  Home profile/mode switching
+-  Alarm system control
+-  Z-Wave network management
+-  Backup and restore
+-  Geofencing
+-  Plugin management
+-  Climate zones
+-  Event logs and statistics
+-  Custom notifications
+-  System settings management
 
 **Total: 40+ NEW tools added!**
 
@@ -417,12 +497,16 @@ Real-time data access:
 - [QUICKSTART.md](QUICKSTART.md) - 5-minute setup guide
 - [EXAMPLES.md](EXAMPLES.md) - Usage examples
 - [LUA_MANAGEMENT.md](LUA_MANAGEMENT.md) - Lua scripting guide
+- [TEMPLATES.md](TEMPLATES.md) - Scene templates guide
+- [ANALYTICS.md](ANALYTICS.md) - Analytics and insights
+- [INTEGRATIONS.md](INTEGRATIONS.md) - Webhooks and MQTT
+- [AUTOMATION.md](AUTOMATION.md) - Automation builder
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Developer guide
 - [CHANGELOG.md](CHANGELOG.md) - Version history
 
 ---
 
-## 🎓 Learning Resources
+##  Learning Resources
 
 ### For Users
 - Natural language control examples
@@ -444,20 +528,17 @@ Real-time data access:
 
 ---
 
-## 🔮 Future Enhancements
+##  Future Enhancements
 
 Potential future features:
 - WebSocket real-time updates
-- Advanced scheduling
-- Machine learning integration
+- Integration lifecycle management (persistent webhook/MQTT instances)
+- Advanced scheduling with cron expressions
 - Voice assistant integration
-- Mobile app configuration
-- Custom dashboards
-- Advanced analytics
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - Adding new tools
@@ -467,7 +548,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ---
 
-## 📞 Support
+##  Support
 
 For issues, questions, or feature requests:
 1. Check the documentation
@@ -477,5 +558,5 @@ For issues, questions, or feature requests:
 
 ---
 
-**Fibaro MCP v2.0.0** - Your complete Fibaro Home Automation management solution! 🏠✨
+**Fibaro MCP v3.0.0** - Your complete Fibaro Home Automation management solution!
 

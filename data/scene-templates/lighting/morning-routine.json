@@ -1,0 +1,48 @@
+{
+  "id": "morning-routine-v1",
+  "name": "Morning Routine",
+  "description": "Gradually turn on lights in the morning to simulate sunrise",
+  "category": "lighting",
+  "author": "Fibaro MCP",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "name": "bedroom_light_id",
+      "type": "device_id",
+      "description": "Bedroom light device ID to control",
+      "required": true
+    },
+    {
+      "name": "wake_time",
+      "type": "time",
+      "description": "Wake up time in HH:MM format",
+      "required": true,
+      "default": "07:00"
+    },
+    {
+      "name": "duration_minutes",
+      "type": "number",
+      "description": "Fade-in duration in minutes",
+      "required": false,
+      "default": 10,
+      "validation": {
+        "min": 1,
+        "max": 60
+      }
+    },
+    {
+      "name": "max_brightness",
+      "type": "number",
+      "description": "Maximum brightness level (0-100)",
+      "required": false,
+      "default": 100,
+      "validation": {
+        "min": 1,
+        "max": 100
+      }
+    }
+  ],
+  "lua_template": "--[[\n  Morning Routine Scene\n  Gradually fades in bedroom light to simulate sunrise\n]]\n\nlocal deviceId = {{bedroom_light_id}}\nlocal duration = {{duration_minutes}} * 60\nlocal maxBrightness = {{max_brightness}}\nlocal steps = 20\n\n-- Turn on light at 0% brightness\nfibaro.call(deviceId, \"setValue\", 0)\nfibaro.call(deviceId, \"turnOn\")\n\n-- Gradually increase brightness\nfor step = 1, steps do\n  local level = math.floor((step / steps) * maxBrightness)\n  fibaro.call(deviceId, \"setValue\", level)\n  fibaro.sleep((duration / steps) * 1000)\nend\n\nfibaro.debug(\"Morning routine completed\")",
+  "required_devices": ["light"],
+  "tags": ["morning", "wake-up", "sunrise", "automation"]
+}

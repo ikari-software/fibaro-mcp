@@ -19,7 +19,7 @@ import {
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { FibaroClient, FibaroConfig } from "./fibaro-client.js";
+import { FibaroClient, FibaroConfig, type FibaroClientLike } from "./fibaro-client.js";
 import { getResources, getTools, handleResourceRead, handleToolCall } from "./mcp-handlers.js";
 import { toMcpError } from "./errors.js";
 import { logger } from "./logger.js";
@@ -44,7 +44,7 @@ class FibaroMCPServer {
     this.server = new Server(
       {
         name: "fibaro-mcp",
-        version: "2.0.0",
+        version: "3.0.0-rc.1",
       },
       {
         capabilities: {
@@ -118,6 +118,7 @@ class FibaroMCPServer {
     };
 
     process.on("SIGINT", async () => {
+      logger.info("Shutting down…");
       await this.server.close();
       process.exit(0);
     });
@@ -136,7 +137,7 @@ class FibaroMCPServer {
       const uri = request.params.uri;
 
       try {
-        return await handleResourceRead(client as any, uri);
+        return await handleResourceRead(client, uri);
       } catch (error) {
         throw toMcpError(error, { operation: "resource", uri });
       }
@@ -148,11 +149,11 @@ class FibaroMCPServer {
 
       try {
         if (name === "first_run") {
-          return await handleToolCall({} as any, name, args);
+          return await handleToolCall({} as FibaroClientLike, name, args);
         }
 
         const client = this.getClient();
-        return await handleToolCall(client as any, name, args);
+        return await handleToolCall(client, name, args);
       } catch (error) {
         throw toMcpError(error, { operation: "tool", name });
       }

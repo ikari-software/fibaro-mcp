@@ -66,7 +66,133 @@ export interface GlobalVariable {
   enumValues?: string[];
 }
 
-export class FibaroClient {
+/**
+ * Interface exposing the full public API surface of FibaroClient.
+ * Used by all managers, engines, handlers, and builders instead of `any`.
+ */
+export interface FibaroClientLike {
+  // Devices
+  getDevices(): Promise<Device[]>;
+  getDevice(deviceId: number): Promise<Device>;
+  callAction(deviceId: number, action: string, args?: any[]): Promise<any>;
+  setDeviceProperty(deviceId: number, property: string, value: any): Promise<void>;
+  updateDevice(deviceId: number, updates: Record<string, any>): Promise<any>;
+  updateDeviceConfig(deviceId: number, config: Record<string, any>): Promise<void>;
+  deleteDevice(deviceId: number): Promise<void>;
+  getDeviceStats(deviceId: number, params?: any): Promise<any>;
+  getDeviceLua(deviceId: number): Promise<any>;
+  getDeviceActions(deviceId: number): Promise<any>;
+
+  // Device convenience methods
+  turnOn(deviceId: number): Promise<void>;
+  turnOff(deviceId: number): Promise<void>;
+  setBrightness(deviceId: number, level: number): Promise<void>;
+  setColor(deviceId: number, r: number, g: number, b: number, w?: number): Promise<void>;
+  setTemperature(deviceId: number, temperature: number): Promise<void>;
+
+  // Rooms
+  getRooms(): Promise<Room[]>;
+  createRoom(room: any): Promise<any>;
+  updateRoom(roomId: number, updates: any): Promise<any>;
+  deleteRoom(roomId: number): Promise<void>;
+
+  // Sections
+  getSections(): Promise<Section[]>;
+  createSection(section: any): Promise<any>;
+  updateSection(sectionId: number, updates: any): Promise<any>;
+  deleteSection(sectionId: number): Promise<void>;
+
+  // Scenes
+  getScenes(): Promise<Scene[]>;
+  getScene(sceneId: number): Promise<Scene>;
+  getSceneLua(sceneId: number): Promise<string>;
+  createScene(scene: any): Promise<any>;
+  updateScene(sceneId: number, updates: any): Promise<any>;
+  deleteScene(sceneId: number): Promise<void>;
+  runScene(sceneId: number): Promise<void>;
+  stopScene(sceneId: number): Promise<void>;
+
+  // Global Variables
+  getGlobalVariables(): Promise<GlobalVariable[]>;
+  getGlobalVariable(name: string): Promise<any>;
+  setGlobalVariable(name: string, value: string): Promise<void>;
+  createGlobalVariable(variable: any): Promise<any>;
+  deleteGlobalVariable(name: string): Promise<void>;
+
+  // System
+  getSystemInfo(): Promise<any>;
+  getWeather(): Promise<any>;
+  getEnergyPanel(): Promise<any>;
+  getEnergyHistory(params: { from: number; to: number; grouping: "devices" | "rooms"; property: "power" | "energy"; id: number }): Promise<any>;
+  getSettings(): Promise<any>;
+  updateSettings(settings: Record<string, any>): Promise<void>;
+  restartSystem(): Promise<void>;
+
+  // Users
+  getUsers(): Promise<any[]>;
+  getUser(userId: number): Promise<any>;
+  createUser(user: any): Promise<any>;
+  updateUser(userId: number, updates: any): Promise<any>;
+  deleteUser(userId: number): Promise<void>;
+
+  // Event logs & history
+  getEventLog(params?: any): Promise<any>;
+
+  // Notifications
+  getNotifications(): Promise<any[]>;
+  sendNotification(notification: any): Promise<any>;
+
+  // Profiles
+  getProfiles(): Promise<any[]>;
+  getActiveProfile(): Promise<any>;
+  setActiveProfile(profileId: number): Promise<void>;
+
+  // Alarms
+  getAlarms(): Promise<any>;
+  armAlarm(partitionId: number): Promise<void>;
+  disarmAlarm(partitionId: number): Promise<void>;
+
+  // QuickApps
+  getQuickApps(): Promise<any[]>;
+  createQuickApp(qa: any): Promise<any>;
+  updateQuickAppCode(deviceId: number, code: string): Promise<void>;
+  updateQuickAppVariables(deviceId: number, variables: any[]): Promise<void>;
+
+  // Climate
+  getClimateZones(): Promise<any[]>;
+  setClimateMode(zoneId: number, mode: string): Promise<void>;
+
+  // Backups
+  createBackup(): Promise<any>;
+  getBackups(): Promise<any[]>;
+  restoreBackup(backupId: string): Promise<void>;
+
+  // Custom events
+  triggerCustomEvent(name: string, data?: any): Promise<any>;
+
+  // Z-Wave
+  getZWaveNetwork(): Promise<any>;
+  startZWaveInclusion(): Promise<void>;
+  stopZWaveInclusion(): Promise<void>;
+  startZWaveExclusion(): Promise<void>;
+  stopZWaveExclusion(): Promise<void>;
+  removeFailedZWaveNode(nodeId: number): Promise<void>;
+  healZWaveNetwork(): Promise<void>;
+
+  // Geofences
+  getGeofences(): Promise<any[]>;
+  createGeofence(geofence: any): Promise<any>;
+  updateGeofence(geofenceId: number, updates: any): Promise<any>;
+  deleteGeofence(geofenceId: number): Promise<void>;
+
+  // Plugins
+  getPlugins(): Promise<any[]>;
+  installPlugin(url: string): Promise<any>;
+  uninstallPlugin(pluginId: string): Promise<any>;
+  restartPlugin(pluginId: string): Promise<any>;
+}
+
+export class FibaroClient implements FibaroClientLike {
   private client: AxiosInstance;
   private config: FibaroConfig;
   private cacheTtlMs: number;
@@ -234,6 +360,12 @@ export class FibaroClient {
   async updateDeviceConfig(deviceId: number, config: Record<string, any>): Promise<void> {
     await this.client.put(`/devices/${deviceId}`, { properties: config });
     this.invalidateCache(["devices:list"]);
+  }
+
+  async updateDevice(deviceId: number, updates: Record<string, any>): Promise<any> {
+    const response = await this.client.put(`/devices/${deviceId}`, updates);
+    this.invalidateCache(["devices:list"]);
+    return response.data;
   }
 
   async getDeviceActions(deviceId: number): Promise<any> {
@@ -500,6 +632,22 @@ export class FibaroClient {
   // Energy panel
   async getEnergyPanel(): Promise<any> {
     const response = await this.client.get("/panels/energy");
+    return response.data;
+  }
+
+  // Energy history (summary-graph API)
+  // Discovered from HC2 web panel - provides historical power/energy data
+  async getEnergyHistory(params: {
+    from: number;
+    to: number;
+    grouping: "devices" | "rooms";
+    property: "power" | "energy";
+    id: number;
+  }): Promise<any> {
+    const { from, to, grouping, property, id } = params;
+    const response = await this.client.get(
+      `/energy/${from}/${to}/summary-graph/${grouping}/${property}/${id}`,
+    );
     return response.data;
   }
 
